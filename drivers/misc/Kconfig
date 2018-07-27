@@ -433,6 +433,14 @@ config SEVEN_SEGMENT_DISPLAY
 	  any conversion methods necessary to map the user input
 	  to two 7-segment displays.
 
+config SEVEN_SEGMENT_GPIO
+	tristate "Platform driver to update seven segment display"
+	depends on SEVEN_SEGMENT_DISPLAY
+	help
+	  Platform device driver which provides an API for displaying on two
+	  7-segment displays, and implements the required bit-banging.
+	  The hardware assumed is 74HC164 wired to two 7-segment displays.
+
 config DW_XDATA_PCIE
 	depends on PCI
 	tristate "Synopsys DesignWare xData PCIe driver"
