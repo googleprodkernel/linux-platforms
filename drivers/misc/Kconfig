@@ -425,6 +425,14 @@ config SRAM
 config SRAM_EXEC
 	bool
 
+config SEVEN_SEGMENT_DISPLAY
+	tristate "Character driver for seven segment display support"
+	help
+	  Character device driver which implements the user-space
+	  API for letting a user write to two 7-segment displays including
+	  any conversion methods necessary to map the user input
+	  to two 7-segment displays.
+
 config DW_XDATA_PCIE
 	depends on PCI
 	tristate "Synopsys DesignWare xData PCIe driver"
