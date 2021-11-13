@@ -1,0 +1,34 @@
+partitions@80000000 {
+	compatible = "fixed-partitions";
+	#address-cells = <1>;
+	#size-cells = <1>;
+	u-boot@0 {
+		label = "u-boot";
+		reg = <0x0000000 0x200000>;
+		read-only;
+	};
+	kernel@200000 {
+		label = "kernel";
+		reg = <0x200000 0x500000>;
+	};
+	hoth-mailbox@700000 {
+		label = "hoth-mailbox";
+		reg = <0x700000 0x10000>;
+	};
+	image-descriptor@710000 {
+		label = "image-descriptor";
+		reg = <0x710000 0x10000>;
+	};
+	rofs@720000 {
+		label = "rofs";
+		reg = <0x720000 0x14e0000>;
+	};
+	rwfs@1c00000 {
+		label = "rwfs";
+		reg = <0x1c00000 0x300000>;
+	};
+	hoth-update@1f00000 {
+		label = "hoth-update";
+		reg = <0x1f00000 0x100000>;
+	};
+};
