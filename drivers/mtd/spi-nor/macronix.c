@@ -87,6 +87,10 @@ static const struct flash_info macronix_parts[] = {
 	{ "mx66u2g45g",	 INFO(0xc2253c, 0, 64 * 1024, 4096,
 			      SECT_4K | SPI_NOR_DUAL_READ |
 			      SPI_NOR_QUAD_READ | SPI_NOR_4B_OPCODES) },
+	/* Google */
+	{"hothb2-512",  INFO(0x260217, 0x0, 64 * 1024,  512, SECT_4K) },
+	{"hothb2-1024", INFO(0x26021a, 0x0, 64 * 1024,  1024, SECT_4K) },
+	{"dauntlessd2-1024", INFO(0x26221a, 0, 64 * 1024, 1024, SECT_4K) },
 };
 
 static void macronix_default_init(struct spi_nor *nor)
