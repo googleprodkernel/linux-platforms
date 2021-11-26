@@ -16,6 +16,7 @@
 #define JTAG_PSPI_SPEED		(10 * 1000000)
 #define JTAG_SCAN_LEN		256
 #define JTAG_MAX_XFER_DATA_LEN	65535
+#define MAX_SPI_XFER_BYTES	0x20000
 
 struct tck_bitbang {
 	unsigned char     tms;
@@ -372,11 +373,12 @@ static int npcm7xx_jtag_switch_pin_func(struct jtag_info *jtag, u8 mode)
 	return 0;
 }
 
-static int npcm7xx_jtag_xfer_spi(struct jtag_info *jtag, u32 xfer_bytes,
+static int npcm7xx_jtag_xfer_spi(struct jtag_info *jtag, u32 xfer_len,
 				 u8 *out, u8 *in)
 {
 	struct spi_message m;
 	struct spi_transfer spi_xfer;
+	u32 xfer_bytes = xfer_len;
 	int err;
 	int i;
 
@@ -387,15 +389,24 @@ static int npcm7xx_jtag_xfer_spi(struct jtag_info *jtag, u32 xfer_bytes,
 	for (i = 0; i < xfer_bytes; i++)
 		out[i] = REVERSE(out[i]);
 
-	memset(&spi_xfer, 0, sizeof(spi_xfer));
-	spi_xfer.speed_hz = jtag->freq;
-	spi_xfer.tx_buf = out;
-	spi_xfer.rx_buf = in;
-	spi_xfer.len = xfer_bytes;
+	while (xfer_len) {
+		xfer_bytes = (xfer_len > MAX_SPI_XFER_BYTES) ? MAX_SPI_XFER_BYTES : xfer_len;
+		xfer_len -= xfer_bytes;
+		memset(&spi_xfer, 0, sizeof(spi_xfer));
+		spi_xfer.speed_hz = jtag->freq;
+		spi_xfer.tx_buf = out;
+		spi_xfer.rx_buf = in;
+		spi_xfer.len = xfer_bytes;
 
-	spi_message_init(&m);
-	spi_message_add_tail(&spi_xfer, &m);
-	err = spi_sync(jtag->spi, &m);
+		spi_message_init(&m);
+		spi_message_add_tail(&spi_xfer, &m);
+		err = spi_sync(jtag->spi, &m);
+		if (err) {
+			dev_err(jtag->dev, "spi_sync err %d, len %d\n", err, xfer_bytes);
+			npcm7xx_jtag_switch_pin_func(jtag, MODE_GPIO);
+			return err;
+		}
+	}
 
 	for (i = 0; i < xfer_bytes; i++)
 		in[i] = REVERSE(in[i]);
