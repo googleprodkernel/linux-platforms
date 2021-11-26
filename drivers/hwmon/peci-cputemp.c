@@ -9,31 +9,33 @@
 #include <linux/platform_device.h>
 #include "peci-hwmon.h"
 
-#define DEFAULT_CHANNEL_NUMS   5
-#define CORETEMP_CHANNEL_NUMS  CORE_NUMS_MAX
-#define CPUTEMP_CHANNEL_NUMS   (DEFAULT_CHANNEL_NUMS + CORETEMP_CHANNEL_NUMS)
+#define DEFAULT_CHANNEL_NUMS	5
+#define MODTEMP_CHANNEL_NUMS	CORE_MASK_BITS_MAX
+#define CPUTEMP_CHANNEL_NUMS	(DEFAULT_CHANNEL_NUMS + MODTEMP_CHANNEL_NUMS)
+#define BIOS_RST_CPL3		BIT(3)
 
 struct temp_group {
-	struct peci_sensor_data die;
-	struct peci_sensor_data dts;
-	struct peci_sensor_data tcontrol;
-	struct peci_sensor_data tthrottle;
-	struct peci_sensor_data tjmax;
-	struct peci_sensor_data core[CORETEMP_CHANNEL_NUMS];
+	struct peci_sensor_data		die;
+	struct peci_sensor_data		dts;
+	struct peci_sensor_data		tcontrol;
+	struct peci_sensor_data		tthrottle;
+	struct peci_sensor_data		tjmax;
+	struct peci_sensor_data		module[MODTEMP_CHANNEL_NUMS];
 };
 
 struct peci_cputemp {
-	struct peci_client_manager *mgr;
-	struct device *dev;
-	char name[PECI_NAME_SIZE];
-	const struct cpu_gen_info *gen_info;
-	struct temp_group temp;
-	u64 core_mask;
-	u32 temp_config[CPUTEMP_CHANNEL_NUMS + 1];
-	uint config_idx;
-	struct hwmon_channel_info temp_info;
-	const struct hwmon_channel_info *info[2];
-	struct hwmon_chip_info chip;
+	struct peci_client_manager	*mgr;
+	struct device			*dev;
+	char				name[PECI_NAME_SIZE];
+	const struct cpu_gen_info	*gen_info;
+	struct temp_group		temp;
+	u64				core_mask;
+	u32				temp_config[CPUTEMP_CHANNEL_NUMS + 1];
+	uint				config_idx;
+	struct hwmon_channel_info	temp_info;
+	const struct hwmon_channel_info	*info[2];
+	struct hwmon_chip_info		chip;
+	char				**module_temp_label;
 };
 
 enum cputemp_channels {
@@ -45,7 +47,7 @@ enum cputemp_channels {
 	channel_core,
 };
 
-static const u32 config_table[DEFAULT_CHANNEL_NUMS + 1] = {
+static const u32 config_table[] = {
 	/* Die temperature */
 	HWMON_T_LABEL | HWMON_T_INPUT | HWMON_T_MAX | HWMON_T_CRIT |
 	HWMON_T_CRIT_HYST,
@@ -64,23 +66,15 @@ static const u32 config_table[DEFAULT_CHANNEL_NUMS + 1] = {
 	HWMON_T_LABEL | HWMON_T_INPUT,
 
 	/* Core temperature - for all core channels */
-	HWMON_T_LABEL | HWMON_T_INPUT | HWMON_T_MAX | HWMON_T_CRIT |
-	HWMON_T_CRIT_HYST,
+	HWMON_T_LABEL | HWMON_T_INPUT,
 };
 
-static const char *cputemp_label[CPUTEMP_CHANNEL_NUMS] = {
+static const char *cputemp_label[DEFAULT_CHANNEL_NUMS] = {
 	"Die",
 	"DTS",
 	"Tcontrol",
 	"Tthrottle",
-	"Tjmax",
-	"Core 0", "Core 1", "Core 2", "Core 3",
-	"Core 4", "Core 5", "Core 6", "Core 7",
-	"Core 8", "Core 9", "Core 10", "Core 11",
-	"Core 12", "Core 13", "Core 14", "Core 15",
-	"Core 16", "Core 17", "Core 18", "Core 19",
-	"Core 20", "Core 21", "Core 22", "Core 23",
-	"Core 24", "Core 25", "Core 26", "Core 27",
+	"Tjmax"
 };
 
 static s32 ten_dot_six_to_millidegree(s32 val)
@@ -90,6 +84,8 @@ static s32 ten_dot_six_to_millidegree(s32 val)
 
 static int get_temp_targets(struct peci_cputemp *priv)
 {
+	struct peci_rd_end_pt_cfg_msg re_msg;
+	u32 bios_reset_cpl_cfg;
 	s32 tthrottle_offset;
 	s32 tcontrol_margin;
 	u8  pkg_cfg[4];
@@ -101,6 +97,42 @@ static int get_temp_targets(struct peci_cputemp *priv)
 	 */
 	if (!peci_sensor_need_update(&priv->temp.tcontrol))
 		return 0;
+
+	/*
+	 * CPU can return invalid temperatures prior to BIOS-PCU handshake
+	 * RST_CPL3 completion so filter the invalid readings out.
+	 */
+	switch (priv->gen_info->model) {
+	case INTEL_FAM6_ICELAKE_X:
+	case INTEL_FAM6_ICELAKE_XD:
+		re_msg.addr = priv->mgr->client->addr;
+		re_msg.msg_type = PECI_ENDPTCFG_TYPE_LOCAL_PCI;
+		re_msg.params.pci_cfg.seg = 0;
+		re_msg.params.pci_cfg.bus = 31;
+		re_msg.params.pci_cfg.device = 30;
+		re_msg.params.pci_cfg.function = 1;
+		re_msg.params.pci_cfg.reg = 0x94;
+		re_msg.rx_len = 4;
+
+		ret = peci_command(priv->mgr->client->adapter,
+				   PECI_CMD_RD_END_PT_CFG, &re_msg);
+		if (ret || re_msg.cc != PECI_DEV_CC_SUCCESS)
+			ret = -EAGAIN;
+		if (ret)
+			return ret;
+
+		bios_reset_cpl_cfg = le32_to_cpup((__le32 *)re_msg.data);
+		if (!(bios_reset_cpl_cfg & BIOS_RST_CPL3)) {
+			dev_dbg(priv->dev, "BIOS and Pcode Node ID isn't configured, BIOS_RESET_CPL_CFG: 0x%x\n",
+				bios_reset_cpl_cfg);
+			return -EAGAIN;
+		}
+
+		break;
+	default:
+		/* TODO: Check reset completion for other CPUs if needed */
+		break;
+	}
 
 	ret = peci_client_read_package_config(priv->mgr,
 					      PECI_MBX_INDEX_TEMP_TARGET, 0,
@@ -161,7 +193,7 @@ static int get_dts(struct peci_cputemp *priv)
 	if (ret)
 		return ret;
 
-	dts_margin = (pkg_cfg[1] << 8) | pkg_cfg[0];
+	dts_margin = le16_to_cpup((__le16 *)pkg_cfg);
 
 	/**
 	 * Processors return a value of DTS reading in 10.6 format
@@ -185,25 +217,25 @@ static int get_dts(struct peci_cputemp *priv)
 	return 0;
 }
 
-static int get_core_temp(struct peci_cputemp *priv, int core_index)
+static int get_module_temp(struct peci_cputemp *priv, int index)
 {
-	s32 core_dts_margin;
+	s32 module_dts_margin;
 	u8  pkg_cfg[4];
 	int ret;
 
-	if (!peci_sensor_need_update(&priv->temp.core[core_index]))
+	if (!peci_sensor_need_update(&priv->temp.module[index]))
 		return 0;
 
 	ret = peci_client_read_package_config(priv->mgr,
-					      PECI_MBX_INDEX_PER_CORE_DTS_TEMP,
-					      core_index, pkg_cfg);
+					      PECI_MBX_INDEX_MODULE_TEMP,
+					      index, pkg_cfg);
 	if (ret)
 		return ret;
 
-	core_dts_margin = le16_to_cpup((__le16 *)pkg_cfg);
+	module_dts_margin = le16_to_cpup((__le16 *)pkg_cfg);
 
 	/*
-	 * Processors return a value of the core DTS reading in 10.6 format
+	 * Processors return a value of the DTS reading in 10.6 format
 	 * (10 bits signed decimal, 6 bits fractional).
 	 * Error codes:
 	 *   0x8000: General sensor error
@@ -211,16 +243,16 @@ static int get_core_temp(struct peci_cputemp *priv, int core_index)
 	 *   0x8002: Underflow on reading value
 	 *   0x8003-0x81ff: Reserved
 	 */
-	if (core_dts_margin >= 0x8000 && core_dts_margin <= 0x81ff)
+	if (module_dts_margin >= 0x8000 && module_dts_margin <= 0x81ff)
 		return -EIO;
 
-	core_dts_margin = ten_dot_six_to_millidegree(core_dts_margin);
+	module_dts_margin = ten_dot_six_to_millidegree(module_dts_margin);
 
 	/* Note that the tjmax should be available before calling it */
-	priv->temp.core[core_index].value = priv->temp.tjmax.value +
-					    core_dts_margin;
+	priv->temp.module[index].value = priv->temp.tjmax.value +
+					 module_dts_margin;
 
-	peci_sensor_mark_updated(&priv->temp.core[core_index]);
+	peci_sensor_mark_updated(&priv->temp.module[index]);
 
 	return 0;
 }
@@ -229,10 +261,15 @@ static int cputemp_read_string(struct device *dev,
 			       enum hwmon_sensor_types type,
 			       u32 attr, int channel, const char **str)
 {
+	struct peci_cputemp *priv = dev_get_drvdata(dev);
+
 	if (attr != hwmon_temp_label)
 		return -EOPNOTSUPP;
 
-	*str = cputemp_label[channel];
+	*str = (channel < DEFAULT_CHANNEL_NUMS) ?
+	       cputemp_label[channel] :
+	       (const char *)priv->module_temp_label[channel -
+						     DEFAULT_CHANNEL_NUMS];
 
 	return 0;
 }
@@ -242,7 +279,7 @@ static int cputemp_read(struct device *dev,
 			u32 attr, int channel, long *val)
 {
 	struct peci_cputemp *priv = dev_get_drvdata(dev);
-	int ret, core_index;
+	int ret, module_index;
 
 	if (channel >= CPUTEMP_CHANNEL_NUMS ||
 	    !(priv->temp_config[channel] & BIT(attr)))
@@ -279,12 +316,12 @@ static int cputemp_read(struct device *dev,
 			*val = priv->temp.tjmax.value;
 			break;
 		default:
-			core_index = channel - DEFAULT_CHANNEL_NUMS;
-			ret = get_core_temp(priv, core_index);
+			module_index = channel - DEFAULT_CHANNEL_NUMS;
+			ret = get_module_temp(priv, module_index);
 			if (ret)
 				break;
 
-			*val = priv->temp.core[core_index].value;
+			*val = priv->temp.module[module_index].value;
 			break;
 		}
 		break;
@@ -333,21 +370,59 @@ static int check_resolved_cores(struct peci_cputemp *priv)
 	int ret;
 
 	/* Get the RESOLVED_CORES register value */
-	msg.addr = priv->mgr->client->addr;
-	msg.device = 30;
-	msg.function = 3;
-	msg.rx_len = 4;
-	msg.bus = 1;
-	msg.reg = 0xb4;
+	switch (priv->gen_info->model) {
+	case INTEL_FAM6_ICELAKE_X:
+	case INTEL_FAM6_ICELAKE_XD:
+		msg.addr = priv->mgr->client->addr;
+		msg.device = 30;
+		msg.function = 3;
+		msg.bus = 14;
+		msg.reg = 0xd4;
+		msg.rx_len = 4;
 
-	ret = peci_command(priv->mgr->client->adapter,
-			   PECI_CMD_RD_PCI_CFG_LOCAL, &msg);
-	if (msg.cc != PECI_DEV_CC_SUCCESS)
-		ret = -EAGAIN;
-	if (ret)
-		return ret;
+		ret = peci_command(priv->mgr->client->adapter,
+				   PECI_CMD_RD_PCI_CFG_LOCAL, &msg);
+		if (msg.cc != PECI_DEV_CC_SUCCESS)
+			ret = -EAGAIN;
+		if (ret)
+			return ret;
 
-	priv->core_mask = le32_to_cpup((__le32 *)msg.pci_config);
+		priv->core_mask = le32_to_cpup((__le32 *)msg.pci_config);
+		priv->core_mask <<= 32;
+
+		msg.reg = 0xd0;
+
+		ret = peci_command(priv->mgr->client->adapter,
+				   PECI_CMD_RD_PCI_CFG_LOCAL, &msg);
+
+		if (msg.cc != PECI_DEV_CC_SUCCESS)
+			ret = -EAGAIN;
+		if (ret) {
+			priv->core_mask = 0;
+			return ret;
+		}
+
+		priv->core_mask |= le32_to_cpup((__le32 *)msg.pci_config);
+		break;
+	default:
+		msg.addr = priv->mgr->client->addr;
+		msg.device = 30;
+		msg.function = 3;
+		msg.bus = 1;
+		msg.reg = 0xb4;
+		msg.rx_len = 4;
+
+		ret = peci_command(priv->mgr->client->adapter,
+				   PECI_CMD_RD_PCI_CFG_LOCAL, &msg);
+		if (msg.cc != PECI_DEV_CC_SUCCESS)
+			ret = -EAGAIN;
+		if (ret)
+			return ret;
+
+		priv->core_mask = le32_to_cpup((__le32 *)msg.pci_config);
+		break;
+	}
+
 	if (!priv->core_mask)
 		return -EAGAIN;
 
@@ -356,7 +431,20 @@ static int check_resolved_cores(struct peci_cputemp *priv)
 	return 0;
 }
 
-static int create_core_temp_info(struct peci_cputemp *priv)
+static int create_module_temp_label(struct peci_cputemp *priv, int idx)
+{
+	priv->module_temp_label[idx] = devm_kzalloc(priv->dev,
+						    PECI_HWMON_LABEL_STR_LEN,
+						    GFP_KERNEL);
+	if (!priv->module_temp_label[idx])
+		return -ENOMEM;
+
+	sprintf(priv->module_temp_label[idx], "Core %d", idx);
+
+	return 0;
+}
+
+static int create_module_temp_info(struct peci_cputemp *priv)
 {
 	int ret, i;
 
@@ -364,11 +452,22 @@ static int create_core_temp_info(struct peci_cputemp *priv)
 	if (ret)
 		return ret;
 
-	for (i = 0; i < priv->gen_info->core_max; i++)
-		if (priv->core_mask & BIT(i))
-			while (priv->config_idx <= i + DEFAULT_CHANNEL_NUMS)
-				priv->temp_config[priv->config_idx++] =
-					config_table[channel_core];
+	priv->module_temp_label = devm_kzalloc(priv->dev,
+					       MODTEMP_CHANNEL_NUMS *
+					       sizeof(char *),
+					       GFP_KERNEL);
+	if (!priv->module_temp_label)
+		return -ENOMEM;
+
+	for (i = 0; i < MODTEMP_CHANNEL_NUMS; i++) {
+		priv->temp_config[priv->config_idx++] = config_table[channel_core];
+
+		if (i < priv->gen_info->core_mask_bits && priv->core_mask & BIT(i)) {
+			ret = create_module_temp_label(priv, i);
+			if (ret)
+				return ret;
+		}
+	}
 
 	return 0;
 }
@@ -404,7 +503,7 @@ static int peci_cputemp_probe(struct platform_device *pdev)
 	priv->temp_config[priv->config_idx++] = config_table[channel_tthrottle];
 	priv->temp_config[priv->config_idx++] = config_table[channel_tjmax];
 
-	ret = create_core_temp_info(priv);
+	ret = create_module_temp_info(priv);
 	if (ret)
 		dev_dbg(dev, "Skipped creating core temp info\n");
 
@@ -437,9 +536,9 @@ static const struct platform_device_id peci_cputemp_ids[] = {
 MODULE_DEVICE_TABLE(platform, peci_cputemp_ids);
 
 static struct platform_driver peci_cputemp_driver = {
-	.probe    = peci_cputemp_probe,
-	.id_table = peci_cputemp_ids,
-	.driver   = { .name = KBUILD_MODNAME, },
+	.probe		= peci_cputemp_probe,
+	.id_table	= peci_cputemp_ids,
+	.driver		= { .name = KBUILD_MODNAME, },
 };
 module_platform_driver(peci_cputemp_driver);
 
