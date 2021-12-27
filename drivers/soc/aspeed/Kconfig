@@ -62,6 +62,24 @@ config ASPEED_XDMA
 	  SoCs. The XDMA engine can perform PCIe DMA operations between the BMC
 	  and a host processor.
 
+config ASPEED_ESPI
+	tristate "Aspeed eSPI Engine Driver"
+	depends on REGMAP && MFD_SYSCON
+	default ARCH_ASPEED
+	help
+	  Enable support for the Aspeed eSPI engine. The eSPI engine
+	  plays as a slave device in BMC to communicate with the host
+	  side master over the eSPI interface. The four eSPI channels,
+	  namely peripheral, virtual wire, out-of-band, and flash are
+	  supported.
+
+config ASPEED_ESPI_MMBI
+	tristate "Aspeed eSPI MMBI Driver"
+	depends on ASPEED_ESPI
+	default ARCH_ASPEED
+	help
+	  Control Aspeed eSPI MMBI driver
+
 endmenu
 
 endif
