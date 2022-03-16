@@ -20,6 +20,7 @@ void amd_iommu_restart_event_logging(struct amd_iommu *iommu);
 void amd_iommu_restart_ga_log(struct amd_iommu *iommu);
 void amd_iommu_restart_ppr_log(struct amd_iommu *iommu);
 void amd_iommu_set_rlookup_table(struct amd_iommu *iommu, u16 devid);
+bool iommu_feature_enable_and_check(struct amd_iommu *iommu, u8 bit);
 int amd_iommu_pdom_id_alloc(void);
 void amd_iommu_pdom_id_free(int id);
 u8 __iomem * __init iommu_map_mmio_space(u64 address, u64 end);
@@ -37,6 +38,8 @@ void amd_iommu_debugfs_setup(struct amd_iommu *iommu);
 #else
 static inline void amd_iommu_debugfs_setup(struct amd_iommu *iommu) {}
 #endif
+
+extern bool amd_iommu_viommu;
 
 /* Needed for interrupt remapping */
 int amd_iommu_prepare(void);

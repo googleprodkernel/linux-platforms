@@ -196,6 +196,9 @@ bool amd_iommu_force_isolation __read_mostly;
  */
 unsigned long *amd_iommu_pd_alloc_bitmap;
 
+/* VIOMMU enabling flag */
+bool amd_iommu_viommu = true;
+
 enum iommu_init_state {
 	IOMMU_START_STATE,
 	IOMMU_IVRS_DETECTED,
@@ -425,6 +428,16 @@ static void iommu_feature_enable(struct amd_iommu *iommu, u8 bit)
 	ctrl = readq(iommu->mmio_base +  MMIO_CONTROL_OFFSET);
 	ctrl |= (1ULL << bit);
 	writeq(ctrl, iommu->mmio_base +  MMIO_CONTROL_OFFSET);
+}
+
+bool iommu_feature_enable_and_check(struct amd_iommu *iommu, u8 bit)
+{
+	u64 ctrl;
+
+	iommu_feature_enable(iommu, bit);
+
+	ctrl = readq(iommu->mmio_base +  MMIO_CONTROL_OFFSET);
+	return (ctrl & (1ULL << bit));
 }
 
 static void iommu_feature_disable(struct amd_iommu *iommu, u8 bit)
@@ -2195,6 +2208,9 @@ static void print_iommu_info(void)
 		if (check_feature(FEATURE_SNP))
 			pr_cont(" SNP");
 
+		if (check_feature(FEATURE_VIOMMU))
+			pr_cont(" vIOMMU");
+
 		pr_cont("\n");
 	}
 
@@ -2207,6 +2223,8 @@ static void print_iommu_info(void)
 		pr_info("V2 page table enabled (Paging mode : %d level)\n",
 			amd_iommu_gpt_level);
 	}
+	if (amd_iommu_viommu)
+		pr_info("AMD-Vi: vIOMMU enabled\n");
 }
 
 static int __init amd_iommu_init_pci(void)
@@ -3516,6 +3534,8 @@ static int __init parse_amd_iommu_options(char *str)
 			amd_iommu_pgtable = AMD_IOMMU_V2;
 		} else if (strncmp(str, "irtcachedis", 11) == 0) {
 			amd_iommu_irtcachedis = true;
+		} else if (strncmp(str, "viommu_disable", 14) == 0) {
+			amd_iommu_viommu = false;
 		} else {
 			pr_notice("Unknown option - '%s'\n", str);
 		}
