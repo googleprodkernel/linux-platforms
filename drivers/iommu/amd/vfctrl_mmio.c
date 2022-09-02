@@ -149,6 +149,16 @@ int amd_viommu_guest_mmio_write(struct amd_viommu_mmio_data *data)
 		writeq(val, vfctrl + 0x30);
 		break;
 	}
+	case MMIO_INTCAPXT_EVT_OFFSET:
+	{
+		amd_viommu_set_ext_int_remap_entry(iommu, EXT_INTREMAP_EVENT, data->value, data->gid);
+		break;
+	}
+	case MMIO_INTCAPXT_PPR_OFFSET:
+	{
+		amd_viommu_set_ext_int_remap_entry(iommu, EXT_INTREMAP_PPR, data->value, data->gid);
+		break;
+	}
 	default:
 		pr_err("%s: Invalid offset: iommu_devid=%#x, gid=%u, offset=%#x, val=%#llx, ctrl=%#llx\n",
 			 __func__, data->iommu_devid, gid, data->offset, val, ctrl);

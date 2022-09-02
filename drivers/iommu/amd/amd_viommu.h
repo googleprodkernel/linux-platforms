@@ -55,6 +55,11 @@
 #define VIOMMU_GUEST_EVT_B_LOG_BASE	0x4800000000ULL
 #define VIOMMU_GUEST_EVT_B_LOG_SIZE	(1 << 19)
 
+/* Extended Interrupt Remapping */
+enum ext_intremap_type {
+	EXT_INTREMAP_EVENT = 0,
+	EXT_INTREMAP_PPR,
+};
 
 #if IS_ENABLED(CONFIG_AMD_IOMMU_IOMMUFD)
 
@@ -68,6 +73,13 @@ u64 amd_viommu_get_vfmmio_addr(struct iommu_viommu_amd *data);
 
 int amd_viommu_domain_id_update(struct amd_iommu *iommu, u16 gid,
 				u16 hdom_id, u16 gdom_id);
+
+int amd_viommu_set_ext_int_remap_entry(struct amd_iommu *iommu,
+				       enum ext_intremap_type type,
+				       u64 val, u16 gid);
+
+struct ext_irte * amd_viommu_get_ext_irte(struct amd_iommu *iommu, u32 ext_id);
+
 #else
 
 static inline int amd_viommu_init(struct amd_iommu *iommu)
@@ -83,6 +95,12 @@ static inline int amd_viommu_init_one(struct amd_iommu *iommu, struct amd_iommu_
 static inline u64 amd_viommu_get_vfmmio_addr(struct iommu_viommu_amd *data)
 {
 	return 0;
+}
+
+static inline struct ext_irte *
+amd_viommu_get_ext_irte(struct amd_iommu *iommu,u32 ext_id)
+{
+	return NULL;
 }
 
 #endif /* CONFIG_AMD_IOMMU_IOMMUFD */
