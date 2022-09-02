@@ -210,6 +210,7 @@ static void set_dte_nested(struct amd_iommu *iommu,
 
 static int nested_attach_device(struct iommu_domain *dom, struct device *dev)
 {
+	struct nested_domain *ndom = to_ndomain(dom);
 	struct iommu_dev_data *dev_data = dev_iommu_priv_get(dev);
 	struct amd_iommu *iommu = get_amd_iommu_from_dev_data(dev_data);
 	int ret = 0;
@@ -222,6 +223,9 @@ static int nested_attach_device(struct iommu_domain *dom, struct device *dev)
 	/* Setup DTE for nested translation and
 	 * update the device table */
 	set_dte_nested(iommu, dom, dev_data);
+
+	ret = amd_viommu_domain_id_update(iommu, dev_data->gid,
+					  ndom->gdom_info->hdom_id, ndom->gdom_id);
 
 	spin_unlock(&dev_data->lock);
 
