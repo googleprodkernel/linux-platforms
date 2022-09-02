@@ -187,6 +187,17 @@ static inline struct amd_iommu *get_amd_iommu_from_dev_data(struct iommu_dev_dat
 	return iommu_get_iommu_dev(dev_data->dev, struct amd_iommu, iommu);
 }
 
+//SURAVEE: TODO: This is a hack. Remove this
+static inline struct amd_iommu *get_amd_iommu_from_devid(u16 devid)
+{
+	struct amd_iommu *iommu;
+
+	for_each_iommu(iommu)
+		if (iommu->devid == devid)
+			return iommu;
+	return NULL;
+}
+
 static inline struct protection_domain *to_pdomain(struct iommu_domain *dom)
 {
 	return container_of(dom, struct protection_domain, domain);

@@ -8,7 +8,8 @@ iommufd-y := \
 	main.o \
 	pages.o \
 	vfio_compat.o \
-	viommu.o
+	viommu.o \
+	amd_viommu.o
 
 iommufd-$(CONFIG_IOMMUFD_TEST) += selftest.o
 
