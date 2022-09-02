@@ -16,7 +16,9 @@
 #include <linux/module.h>
 #include <linux/mutex.h>
 #include <linux/slab.h>
+#include <linux/amd-viommu.h>
 #include <uapi/linux/iommufd.h>
+#include <uapi/linux/amd_viommu.h>
 
 #include "io_pagetable.h"
 #include "iommufd_private.h"
@@ -381,13 +383,6 @@ union ucmd_buffer {
 #endif
 };
 
-struct iommufd_ioctl_op {
-	unsigned int size;
-	unsigned int min_size;
-	unsigned int ioctl_num;
-	int (*execute)(struct iommufd_ucmd *ucmd);
-};
-
 #define IOCTL_OP(_ioctl, _fn, _struct, _last)                                  \
 	[_IOC_NR(_ioctl) - IOMMUFD_CMD_BASE] = {                               \
 		.size = sizeof(_struct) +                                      \
@@ -450,8 +445,14 @@ static long iommufd_fops_ioctl(struct file *filp, unsigned int cmd,
 
 	nr = _IOC_NR(cmd);
 	if (nr < IOMMUFD_CMD_BASE ||
-	    (nr - IOMMUFD_CMD_BASE) >= ARRAY_SIZE(iommufd_ioctl_ops))
+	    (nr - IOMMUFD_CMD_BASE) >= ARRAY_SIZE(iommufd_ioctl_ops)) {
+		/* AMD VIOMMU ioctl */
+		if (!iommufd_amd_viommu_ioctl(filp, cmd, arg))
+			return 0;
+
+		/* VFIO ioctl */
 		return iommufd_vfio_ioctl(ictx, cmd, arg);
+	}
 
 	ucmd.ictx = ictx;
 	ucmd.ubuffer = (void __user *)arg;
