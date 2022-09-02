@@ -4018,6 +4018,11 @@ int amd_iommu_deactivate_guest_mode(void *data)
 	entry->lo.val = 0;
 	entry->hi.val = 0;
 
+//SURAVEE: HACK
+	if (ir_data->is_ext) {
+		return 0;
+	}
+
 	entry->lo.fields_remap.valid       = valid;
 	entry->lo.fields_remap.dm          = apic->dest_mode_logical;
 	entry->lo.fields_remap.int_type    = apic->delivery_mode;
@@ -4191,7 +4196,12 @@ int amd_iommu_create_irq_domain(struct amd_iommu *iommu)
 int amd_iommu_update_ga(int cpu, bool is_run, void *data)
 {
 	struct amd_ir_data *ir_data = (struct amd_ir_data *)data;
-	struct irte_ga *entry = (struct irte_ga *) ir_data->entry;
+	struct irte_ga *entry;
+
+	if (!ir_data || !ir_data->entry)
+		return 0;
+
+	entry = (struct irte_ga *) ir_data->entry;
 
 	if (!AMD_IOMMU_GUEST_IR_VAPIC(amd_iommu_guest_ir) ||
 	    !entry || !entry->lo.fields_vapic.guest_mode)

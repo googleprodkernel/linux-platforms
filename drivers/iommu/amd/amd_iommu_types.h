@@ -18,6 +18,7 @@
 #include <linux/iommufd.h>
 #include <linux/irqreturn.h>
 #include <linux/io-pgtable.h>
+#include <linux/hashtable.h>
 
 #include <uapi/linux/iommufd.h>
 
@@ -329,6 +330,7 @@
 
 #define DTE_EXT_INTTABLEN_L1_VALUE	10ULL
 #define DTE_EXT_INTTABLEN_L1		(DTE_EXT_INTTABLEN_L1_VALUE << 1)
+#define EXT_INTTABLEN_L2_VALUE	8ULL /* 8-bit index = 256 entries */
 
 #define PAGE_MODE_NONE    0x00
 #define PAGE_MODE_1_LEVEL 0x01
@@ -869,6 +871,8 @@ struct amd_iommu {
 	struct protection_domain *viommu_pdom;
 	void *cmdbuf_dirty_mask;
 	u64 *ext_ir_table;		 /* Pointer to the Ext-IR table */
+	DECLARE_HASHTABLE(ext_irte_hlist, 18);
+	spinlock_t ext_irte_hlist_lock;
 };
 
 static inline struct amd_iommu *dev_to_amd_iommu(struct device *dev)
@@ -1152,6 +1156,16 @@ struct amd_ir_data {
 	int ga_vector;
 	u64 ga_root_ptr;
 	u32 ga_tag;
+	bool is_ext; /* Extended Interupt Remapping */
+	u32 ext_id; /* Ext-IR ID*/
+};
+
+struct ext_irte {
+	u16 ext_id;
+	struct hlist_node hnode;
+	struct irte_ga entry;
+	struct irte_ga *entry_ptr;
+	struct amd_ir_data ir_data;
 };
 
 struct amd_irte_ops {

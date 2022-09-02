@@ -952,6 +952,7 @@ int avic_pi_update_irte(struct kvm *kvm, unsigned int host_irq,
 						     svm->vcpu.vcpu_id);
 			pi.is_guest_mode = true;
 			pi.vcpu_data = &vcpu_info;
+			pi.ir_data = NULL;
 			ret = irq_set_vcpu_affinity(host_irq, &pi);
 
 			/**

@@ -328,6 +328,9 @@ int __init amd_viommu_init(struct amd_iommu *iommu)
 
 	set_iommu_dte(iommu);
 
+	hash_init(iommu->ext_irte_hlist);
+	spin_lock_init(&iommu->ext_irte_hlist_lock);
+
 	ret = viommu_enable(iommu);
 	if (ret)
 		return ret;
@@ -515,3 +518,140 @@ int amd_viommu_domain_id_update(struct amd_iommu *iommu, u16 gid,
 	return 0;
 }
 EXPORT_SYMBOL(amd_viommu_domain_id_update);
+
+/*****************************************************
+ * Extended interrupt remapping support
+ */
+#define EXT_IR_ID(x, y)		(((x & 0x3) << 16) | (y & 0xFFFF))
+#define EXT_IR_ID_2_TYPE(x)	((x >> 16) & 0x3)
+#define EXT_IR_ID_2_L1(x)	((x >> 8) & 0x3FF)
+#define EXT_IR_ID_2_L2(x)	(x & 0xFF)
+
+static struct irte_ga *_get_ext_intremap_entry(struct amd_iommu *iommu, u32 ext_id)
+{
+	u64 *l1_entry, *l2_entry;
+	struct irte_ga *l2_table;
+	u32 l1_index = EXT_IR_ID_2_L1(ext_id);
+	u32 l2_index = EXT_IR_ID_2_L2(ext_id);
+
+	l1_entry = &iommu->ext_ir_table[l1_index];
+
+	/* Check if the l1_entry is valid */
+	if (*l1_entry & 1ULL) {
+		l2_table = iommu_phys_to_virt(*l1_entry & 0x000FFFFFFFFFFFC0);
+	} else {
+		int size = get_irq_table_size(MAX_IRQS_PER_TABLE_512);
+
+		l2_table = iommu_alloc_pages_node_sz(dev_to_node(&iommu->dev->dev),
+						     GFP_KERNEL, size);
+		if (!l2_table)
+			return NULL;
+
+		/* Setup the L1 entry */
+		*l1_entry = iommu_virt_to_phys(l2_table) & 0x000FFFFFFFFFFFC0;
+		*l1_entry |= (EXT_INTTABLEN_L2_VALUE << 2);
+		*l1_entry |= 1ULL; /* Valid */
+	}
+	l2_entry = (u64*) &l2_table[l2_index];
+
+	pr_debug("%s: type=%#x, ext_intremap_tbl=%#llx, l1_entry=%#llx(%#llx, %u), l2_entry=%#llx(%#llx, %u)\n",
+		__func__, EXT_IR_ID_2_TYPE(ext_id),
+		iommu_virt_to_phys(iommu->ext_ir_table),
+		iommu_virt_to_phys(l1_entry), *l1_entry, l1_index,
+		iommu_virt_to_phys(l2_entry), *l2_entry, l2_index);
+
+	return &l2_table[l2_index];
+}
+
+struct ext_irte * amd_viommu_get_ext_irte(struct amd_iommu *iommu, u32 ext_id)
+{
+	unsigned long flags;
+	struct ext_irte *tmp, *eirte = NULL;
+
+	spin_lock_irqsave(&iommu->ext_irte_hlist_lock, flags);
+
+	hash_for_each_possible(iommu->ext_irte_hlist, tmp, hnode, ext_id) {
+		if (tmp->ext_id == ext_id) {
+			eirte = tmp;
+			break;
+		}
+	}
+
+	if (eirte)
+		goto out;
+
+	/* Allocate new ext-irte */
+	eirte = kzalloc(sizeof(*eirte), GFP_KERNEL);
+	if (!eirte)
+		goto out;
+
+	eirte->entry_ptr = _get_ext_intremap_entry(iommu, ext_id);
+	if (!eirte->entry_ptr)
+		goto out_free_eirte;
+
+	eirte->ext_id = ext_id;
+	hash_add(iommu->ext_irte_hlist, &eirte->hnode, ext_id);
+	goto out;
+
+out_free_eirte:
+	kfree(eirte);
+	eirte = NULL;
+out:
+	spin_unlock_irqrestore(&iommu->ext_irte_hlist_lock, flags);
+	return eirte;
+}
+
+int amd_viommu_set_ext_int_remap_entry(struct amd_iommu *iommu, enum ext_intremap_type type,
+				       u64 val, u16 gid)
+{
+	struct ext_irte *eirte;
+	struct amd_ir_data *ir_data;
+	struct amd_iommu_pi_data pi;
+	u64 pa;
+	u32 ga_tag;
+	u32 dest1 = (val >> 8) & 0xFFFFFF;
+	u32 dest2 = (val >> 56) & 0xFF;
+	u32 dest = (dest2 << 24) | dest1;
+	u8 vector = (val >> 32) & 0xFF;
+	u32 ext_id = EXT_IR_ID(type, gid);
+
+	if (!svm_ops)
+		return -EINVAL;
+
+	ga_tag = svm_ops->get_ga_tag(gid, dest);
+	pa = svm_ops->get_apic_backing_page(gid, dest);
+	if (!ga_tag || !pa)
+		return -EINVAL;
+
+	eirte = amd_viommu_get_ext_irte(iommu, ext_id);
+	if (!eirte)
+		return -EINVAL;
+
+	pr_debug("%s: type=%#x, dest=%#x, vector=%#x, backing_page=%#llx, ga_tag=%#x\n",
+		 __func__, type, dest, vector, pa, ga_tag);
+
+	/* This is normally setup during prepare */
+	eirte->entry.lo.fields_vapic.valid = 1;
+
+	/*
+	 * Initialize ir_data, which will be used in
+	 * amd_iommu_activate_guest_mode()
+	 */
+	ir_data = &eirte->ir_data;
+	ir_data->iommu = iommu;
+	ir_data->is_ext = true;
+	ir_data->ext_id = EXT_IR_ID(type, gid);
+	ir_data->ga_root_ptr = (pa & 0xFFFFFFFFFFFFFULL) >> 12;
+	ir_data->ga_tag = ga_tag;
+	ir_data->ga_vector = vector;
+	ir_data->entry = &eirte->entry;
+
+	pi.ir_data = ir_data;
+	pi.prev_ga_tag = 0;
+	pi.ga_tag = ga_tag;
+	pi.base = (pa & 0xFFFFFFFFFFFFFULL) >> 12;
+
+	svm_ops->set_ext_ir_affinity(gid, dest, &pi);
+
+	return 0;
+}
