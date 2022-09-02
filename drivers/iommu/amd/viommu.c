@@ -121,3 +121,24 @@ int __init amd_viommu_init(struct amd_iommu *iommu)
 
 	return 0;
 }
+
+/*
+ * Program the DomID via VFCTRL registers
+ * This function will be called during VM init via VFIO.
+ */
+int amd_viommu_domain_id_update(struct amd_iommu *iommu, u16 gid,
+				u16 hdom_id, u16 gdom_id)
+{
+	u64 val, tmp1, tmp2;
+	u8 __iomem *vfctrl = VIOMMU_VFCTRL_MMIO_BASE(iommu, gid);
+
+	tmp1 = gdom_id;
+	tmp1 = ((tmp1 & 0xFFFFULL) << 46);
+	tmp2 = hdom_id;
+	tmp2 = ((tmp2 & 0xFFFFULL) << 14);
+	val = tmp1 | tmp2 | 0x8000000000000001UL;
+	writeq(val, vfctrl + VIOMMU_VFCTRL_GUEST_DID_MAP_CONTROL1_OFFSET);
+
+	return 0;
+}
+EXPORT_SYMBOL(amd_viommu_domain_id_update);

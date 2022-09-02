@@ -57,6 +57,8 @@
 
 int amd_viommu_init(struct amd_iommu *iommu);
 
+int amd_viommu_domain_id_update(struct amd_iommu *iommu, u16 gid,
+				u16 hdom_id, u16 gdom_id);
 #else
 
 static inline int amd_viommu_init(struct amd_iommu *iommu)
