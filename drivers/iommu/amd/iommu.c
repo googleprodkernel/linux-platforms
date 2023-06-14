@@ -40,6 +40,7 @@
 #include <uapi/linux/iommufd.h>
 
 #include "amd_iommu.h"
+#include "iommufd.h"
 #include "../dma-iommu.h"
 #include "../irq_remapping.h"
 
@@ -3020,6 +3021,7 @@ const struct iommu_ops amd_iommu_ops = {
 	.identity_domain = &identity_domain.domain,
 	.domain_alloc = amd_iommu_domain_alloc,
 	.domain_alloc_user = amd_iommu_domain_alloc_user,
+	.hw_info = amd_iommufd_hw_info,
 	.probe_device = amd_iommu_probe_device,
 	.release_device = amd_iommu_release_device,
 	.probe_finalize = amd_iommu_probe_finalize,
