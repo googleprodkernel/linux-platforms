@@ -21,11 +21,13 @@ void amd_iommu_restart_event_logging(struct amd_iommu *iommu);
 void amd_iommu_restart_ga_log(struct amd_iommu *iommu);
 void amd_iommu_restart_ppr_log(struct amd_iommu *iommu);
 void amd_iommu_set_rlookup_table(struct amd_iommu *iommu, u16 devid);
+void iommu_feature_enable(struct amd_iommu *iommu, u8 bit);
 bool iommu_feature_enable_and_check(struct amd_iommu *iommu, u8 bit);
 int amd_iommu_pdom_id_alloc(void);
 void amd_iommu_pdom_id_free(int id);
 u8 __iomem * __init iommu_map_mmio_space(u64 address, u64 end);
 int iommu_flush_dte(struct amd_iommu *iommu, u16 devid);
+struct iommu_domain *amd_iommu_domain_alloc(unsigned int type);
 int amd_iommu_v1_map_pages(struct io_pgtable_ops *ops, unsigned long iova,
 			   phys_addr_t paddr, size_t pgsize, size_t pgcount,
 			   int prot, gfp_t gfp, size_t *mapped);
@@ -52,6 +54,9 @@ int amd_iommu_enable_faulting(void);
 extern int amd_iommu_guest_ir;
 extern enum io_pgtable_fmt amd_iommu_pgtable;
 extern int amd_iommu_gpt_level;
+
+struct protection_domain *protection_domain_alloc(unsigned int type);
+void amd_iommu_domain_free(struct iommu_domain *dom);
 
 bool amd_iommu_v2_supported(void);
 struct amd_iommu *get_amd_iommu(unsigned int idx);

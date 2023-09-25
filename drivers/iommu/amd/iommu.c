@@ -2602,7 +2602,7 @@ static void protection_domain_init(struct protection_domain *domain, int nid)
 	INIT_LIST_HEAD(&domain->viommu_list);
 }
 
-static struct protection_domain *protection_domain_alloc(unsigned int type)
+struct protection_domain *protection_domain_alloc(unsigned int type)
 {
 	struct protection_domain *domain;
 
@@ -2710,7 +2710,7 @@ static struct iommu_domain *do_iommu_domain_alloc(unsigned int type,
 	return &domain->domain;
 }
 
-static struct iommu_domain *amd_iommu_domain_alloc(unsigned int type)
+struct iommu_domain *amd_iommu_domain_alloc(unsigned int type)
 {
 	struct iommu_domain *domain;
 	int pgtable = amd_iommu_pgtable;
@@ -2787,7 +2787,7 @@ amd_iommu_domain_alloc_user(struct device *dev, u32 flags,
 	return ERR_PTR(-EOPNOTSUPP);
 }
 
-static void amd_iommu_domain_free(struct iommu_domain *dom)
+void amd_iommu_domain_free(struct iommu_domain *dom)
 {
 	struct protection_domain *domain;
 	unsigned long flags;
