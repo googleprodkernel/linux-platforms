@@ -61,7 +61,10 @@ int amd_iommufd_viommu_init(struct iommufd_viommu *viommu, struct iommu_domain *
 	if (ret)
 		return ret;
 
-	/* TODO: Add AMD HW-vIOMMU initialization code */
+	aviommu->gid = amd_iommu_gid_alloc();
+	if (aviommu->gid < 0)
+		return aviommu->gid;
+	data.out_gid = aviommu->gid;
 
 	ret = iommu_copy_struct_to_user(user_data, &data,
 					IOMMU_VIOMMU_TYPE_AMD,
@@ -79,6 +82,7 @@ int amd_iommufd_viommu_init(struct iommufd_viommu *viommu, struct iommu_domain *
 	return 0;
 
 err_out:
+	amd_iommu_gid_free(aviommu->gid);
 	return ret;
 }
 
@@ -89,6 +93,8 @@ static void amd_iommufd_viommu_destroy(struct iommufd_viommu *viommu)
 	struct amd_iommu_viommu *aviommu = container_of(viommu, struct amd_iommu_viommu, core);
 	struct protection_domain *pdom = aviommu->parent;
 
+	pr_debug("%s: gid:%#x\n", __func__, aviommu->gid);
+
 	spin_lock_irqsave(&pdom->lock, flags);
 	list_for_each_entry_safe(entry, next, &pdom->viommu_list, pdom_list) {
 		if (entry == aviommu)
@@ -96,6 +102,7 @@ static void amd_iommufd_viommu_destroy(struct iommufd_viommu *viommu)
 	}
 	spin_unlock_irqrestore(&pdom->lock, flags);
 
+	amd_iommu_gid_free(aviommu->gid);
 }
 
 /*

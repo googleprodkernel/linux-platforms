@@ -244,3 +244,6 @@ amd_iommu_make_clear_dte(struct iommu_dev_data *dev_data, struct dev_table_entry
 struct iommu_domain *
 amd_iommu_alloc_domain_nested(struct iommufd_viommu *viommu, u32 flags,
 			      const struct iommu_user_data *user_data);
+/* Guest ID for vIOMMU */
+int amd_iommu_gid_alloc(void);
+void amd_iommu_gid_free(int gid);

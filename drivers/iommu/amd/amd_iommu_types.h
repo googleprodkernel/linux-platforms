@@ -573,6 +573,7 @@ struct amd_iommu_viommu {
 	struct xarray gdomid_array;
 
 	u32 iommu_devid;
+	u16 gid;
 };
 
 /*
