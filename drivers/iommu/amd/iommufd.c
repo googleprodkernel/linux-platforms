@@ -48,6 +48,7 @@ int amd_iommufd_viommu_init(struct iommufd_viommu *viommu, struct iommu_domain *
 	unsigned long flags;
 	struct iommu_viommu_amd data;
 	struct protection_domain *pdom = to_pdomain(parent);
+	struct amd_iommu *iommu = container_of(viommu->iommu_dev, struct amd_iommu, iommu);
 	struct amd_iommu_viommu *aviommu = container_of(viommu, struct amd_iommu_viommu, core);
 
 	xa_init(&aviommu->gdomid_array);
@@ -65,6 +66,21 @@ int amd_iommufd_viommu_init(struct iommufd_viommu *viommu, struct iommu_domain *
 	aviommu->gid = amd_iommu_gid_alloc();
 	if (aviommu->gid < 0)
 		return aviommu->gid;
+
+	/* Reset vIOMMU MMIOs to initialize the vIOMMU */
+	iommu_reset_vmmio(iommu, aviommu->gid);
+
+	amd_iommu_set_translate_dte(iommu, aviommu->gid, pdom, data.trans_devid);
+
+	/* Set translate devid in vfctrl mmio */
+	writeq((data.trans_devid & 0xFFFFULL) << 16,
+	       VIOMMU_VFCTRL_MMIO_BASE(iommu, aviommu->gid) +
+	       VIOMMU_VFCTRL_GUEST_MISC_CONTROL_OFFSET);
+
+	ret = amd_viommu_init_one(iommu, aviommu);
+	if (ret)
+		goto err_out;
+
 	data.out_gid = aviommu->gid;
 
 	ret = iommu_copy_struct_to_user(user_data, &data,
@@ -73,6 +89,8 @@ int amd_iommufd_viommu_init(struct iommufd_viommu *viommu, struct iommu_domain *
 	if (ret)
 		goto err_out;
 
+	aviommu->viommu_devid = data.viommu_devid;
+	aviommu->trans_devid = data.trans_devid;
 	aviommu->iommu_devid = data.iommu_devid;
 	viommu->ops = &amd_viommu_ops;
 
@@ -91,10 +109,11 @@ static void amd_iommufd_viommu_destroy(struct iommufd_viommu *viommu)
 {
 	unsigned long flags;
 	struct amd_iommu_viommu *entry, *next;
+	struct amd_iommu *iommu = container_of(viommu->iommu_dev, struct amd_iommu, iommu);
 	struct amd_iommu_viommu *aviommu = container_of(viommu, struct amd_iommu_viommu, core);
 	struct protection_domain *pdom = aviommu->parent;
 
-	pr_debug("%s: gid:%#x\n", __func__, aviommu->gid);
+	pr_debug("%s: gid:%#x, iommu devid=%#x\n", __func__, aviommu->gid, iommu->devid);
 
 	spin_lock_irqsave(&pdom->lock, flags);
 	list_for_each_entry_safe(entry, next, &pdom->viommu_list, pdom_list) {
@@ -103,6 +122,7 @@ static void amd_iommufd_viommu_destroy(struct iommufd_viommu *viommu)
 	}
 	spin_unlock_irqrestore(&pdom->lock, flags);
 
+	amd_viommu_uninit_one(iommu, aviommu);
 	amd_iommu_gid_free(aviommu->gid);
 }
 
