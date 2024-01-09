@@ -1785,6 +1785,22 @@ static int domain_flush_pages_v1(struct protection_domain *pdom,
 	return ret;
 }
 
+int amd_iommu_flush_private_vm_region(struct amd_iommu *iommu, struct protection_domain *pdom,
+				      u64 address, size_t size)
+{
+	int ret;
+	struct iommu_cmd cmd;
+
+	build_inv_iommu_pages(&cmd, address, size, pdom->id, 0, false);
+
+	ret = iommu_queue_command(iommu, &cmd);
+	if (ret)
+		return ret;
+
+	iommu_completion_wait(iommu);
+	return ret;
+}
+
 /*
  * TLB invalidation function which is called from the mapping functions.
  * It flushes range of PTEs of the domain.
@@ -3104,8 +3120,8 @@ static void amd_iommu_flush_iotlb_all(struct iommu_domain *domain)
 	spin_unlock_irqrestore(&dom->lock, flags);
 }
 
-static void amd_iommu_iotlb_sync(struct iommu_domain *domain,
-				 struct iommu_iotlb_gather *gather)
+void amd_iommu_iotlb_sync(struct iommu_domain *domain,
+			  struct iommu_iotlb_gather *gather)
 {
 	struct protection_domain *dom = to_pdomain(domain);
 	unsigned long flags;
@@ -3150,6 +3166,55 @@ static const struct iommu_dirty_ops amd_dirty_ops = {
 	.set_dirty_tracking = amd_iommu_set_dirty_tracking,
 	.read_and_clear_dirty = amd_iommu_read_and_clear_dirty,
 };
+
+#if IS_ENABLED(CONFIG_AMD_IOMMU_IOMMUFD)
+
+void amd_iommu_update_vfctrl_mmio_translate_devid(struct amd_iommu *iommu,
+						  u16 gid, u32 devid)
+{
+	writeq((devid & 0xFFFFULL) << 16,
+	       VIOMMU_VFCTRL_MMIO_BASE(iommu, gid) +
+	       VIOMMU_VFCTRL_GUEST_MISC_CONTROL_OFFSET);
+}
+
+void amd_iommu_set_translate_dte(struct amd_iommu *iommu, u16 gid,
+				 struct protection_domain *pdom,
+				 u32 devid)
+{
+	u64 val, tmp0 = 0ULL, tmp1 = 0ULL;
+	struct dev_table_entry *dev_table = get_dev_table(iommu);
+
+	pr_debug("%s: gid=%#x, iommu_devid=%#x, evid=%#x\n",
+		 __func__, gid, iommu->devid, devid);
+
+	/* Setup DTE for v1 page table at the offset specified by devid */
+	val = FIELD_GET(GENMASK_ULL(51,12), iommu_virt_to_phys(pdom->iop.root));
+	tmp0 |=	FIELD_PREP(DTE_HOST_TRP, val);
+	tmp0 |= FIELD_PREP(DTE_MODE_MASK, pdom->iop.mode);
+	tmp0 |= (DTE_FLAG_IR | DTE_FLAG_IW | DTE_FLAG_TV | DTE_FLAG_V);
+	tmp1 |= FIELD_PREP(DTE_DOMID_MASK, pdom->id);
+
+	dev_table[devid].data[0] = tmp0;
+	dev_table[devid].data[1] = tmp1;
+
+	iommu_flush_dte(iommu, devid);
+	iommu_completion_wait(iommu);
+}
+
+void amd_iommu_clear_translate_dte(struct amd_iommu *iommu, u16 gid, u32 devid)
+{
+	struct dev_table_entry *dev_table = get_dev_table(iommu);
+
+	pr_debug("%s: gid=%#x, iommu_devid=%#x, devid=%#x\n",
+		 __func__, gid, iommu->devid, devid);
+
+	dev_table[devid].data[0] = 0ULL;
+	dev_table[devid].data[1] = 0ULL;
+
+	iommu_flush_dte(iommu, devid);
+	iommu_completion_wait(iommu);
+}
+#endif /* CONFIG_AMD_IOMMU_IOMMUFD */
 
 const struct iommu_ops amd_iommu_ops = {
 	.capable = amd_iommu_capable,

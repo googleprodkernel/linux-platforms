@@ -57,6 +57,8 @@
 
 int amd_viommu_init(struct amd_iommu *iommu);
 
+int amd_viommu_init_one(struct amd_iommu *iommu, struct amd_iommu_viommu *viommu);
+
 #else
 
 static inline int amd_viommu_init(struct amd_iommu *iommu)
@@ -64,6 +66,13 @@ static inline int amd_viommu_init(struct amd_iommu *iommu)
 	return 0;
 }
 
+static inline int amd_viommu_init_one(struct amd_iommu *iommu, struct amd_iommu_viommu *viommu)
+{
+	return -EOPNOTSUPP;
+}
+
 #endif /* CONFIG_AMD_IOMMU_IOMMUFD */
+
+void amd_viommu_uninit_one(struct amd_iommu *iommu, struct amd_iommu_viommu *viommu);
 
 #endif /* AMD_VIOMMU_H */
