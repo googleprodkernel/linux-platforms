@@ -1179,6 +1179,11 @@ void avic_vcpu_unblocking(struct kvm_vcpu *vcpu)
 	avic_vcpu_load(vcpu, vcpu->cpu);
 }
 
+
+const struct amd_iommu_svm_ops svm_ops = {
+	.ga_log_notifier = avic_ga_log_notifier,
+};
+
 /*
  * Note:
  * - The module param avic enable both xAPIC and x2APIC mode.
@@ -1215,7 +1220,7 @@ bool avic_hardware_setup(void)
 	if (x2avic_enabled)
 		pr_info("x2AVIC enabled\n");
 
-	amd_iommu_register_ga_log_notifier(&avic_ga_log_notifier);
+	amd_iommu_register_svm_ops(&svm_ops);
 
 	return true;
 }
