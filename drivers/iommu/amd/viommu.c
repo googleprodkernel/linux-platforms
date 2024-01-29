@@ -28,6 +28,8 @@
 #define VIOMMU_MAX_GDEVID	0xFFFF
 #define VIOMMU_MAX_GDOMID	0xFFFF
 
+#define EXT_INT_REMAP_TBL_L1_SIZE (PAGE_SIZE * 2)
+
 LIST_HEAD(viommu_devid_map);
 
 static void viommu_clear_dirty_status_mask(struct amd_iommu *iommu, unsigned int gid);
@@ -137,10 +139,18 @@ err_out:
 	return NULL;
 }
 
+static int alloc_ext_int_remap_tbl_entry(struct amd_iommu *iommu)
+{
+	iommu->ext_ir_table = (void *) __get_free_pages(GFP_KERNEL | __GFP_ZERO,
+							get_order(EXT_INT_REMAP_TBL_L1_SIZE));
+
+	return iommu->ext_ir_table ? 0 : -ENOMEM;
+}
+
 /* Set DTE for IOMMU device */
 static void set_iommu_dte(struct amd_iommu *iommu)
 {
-	u64 dte0, dte1;
+	u64 dte0, dte1, dte2;
 	u16 devid = iommu->devid;
 	struct protection_domain *pdom = iommu->viommu_pdom;
 	struct dev_table_entry *dev_table = get_dev_table(iommu);
@@ -153,7 +163,15 @@ static void set_iommu_dte(struct amd_iommu *iommu)
 	dte1 &= ~DTE_DOMID_MASK;
 	dte1 |= pdom->id;
 
+	/* For Extended Interrupt Remapping Table */
+	dte2 = dev_table[devid].data[2];
+	dte2 &= ~DTE_IRQ_PHYS_ADDR_MASK;
+	dte2 |= iommu_virt_to_phys(iommu->ext_ir_table);
+	dte2 |= DTE_IRQ_REMAP_INTCTL;
+	dte2 |= DTE_EXT_INTTABLEN_L1;
+	dte2 |= DTE_IRQ_REMAP_ENABLE;
 
+	dev_table[devid].data[2] = dte2;
 	dev_table[devid].data[1] = dte1;
 	dev_table[devid].data[0] = dte0;
 
@@ -297,6 +315,10 @@ int __init amd_viommu_init(struct amd_iommu *iommu)
 		return ret;
 
 	ret = viommu_vf_vfcntl_init(iommu);
+	if (ret)
+		return ret;
+
+	ret = alloc_ext_int_remap_tbl_entry(iommu);
 	if (ret)
 		return ret;
 
