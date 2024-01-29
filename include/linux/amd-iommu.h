@@ -28,6 +28,8 @@ struct amd_iommu_pi_data {
 
 struct amd_iommu_svm_ops {
 	int (*ga_log_notifier)(u32 ga_tag);
+	u32 (*get_ga_tag)(u32 vm_id, u32 apic_id);
+	u64 (*get_apic_backing_page)(u32 vm_id, u32 apic_id);
 };
 
 #ifdef CONFIG_AMD_IOMMU
