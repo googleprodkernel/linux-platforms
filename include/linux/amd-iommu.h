@@ -30,6 +30,7 @@ struct amd_iommu_svm_ops {
 	int (*ga_log_notifier)(u32 ga_tag);
 	u32 (*get_ga_tag)(u32 vm_id, u32 apic_id);
 	u64 (*get_apic_backing_page)(u32 vm_id, u32 apic_id);
+	int (*set_ext_ir_affinity)(u32 vm_id, u32 apic_id, struct amd_iommu_pi_data *pi);
 };
 
 #ifdef CONFIG_AMD_IOMMU
