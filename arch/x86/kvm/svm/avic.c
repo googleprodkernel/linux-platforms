@@ -1191,9 +1191,45 @@ void avic_vcpu_unblocking(struct kvm_vcpu *vcpu)
 	avic_vcpu_load(vcpu, vcpu->cpu);
 }
 
+static struct vcpu_svm *get_vcpu_svm(u32 vm_id, u32 apic_id)
+{
+	struct kvm_vcpu *vcpu;
+	struct kvm_svm *kvm_svm = get_kvm_svm(vm_id);
+
+	if (!kvm_svm)
+		return ERR_PTR(-EINVAL);
+
+	vcpu = kvm_get_vcpu_by_id(&kvm_svm->kvm, apic_id);
+	if (!vcpu)
+		return ERR_PTR(-EINVAL);
+
+	return to_svm(vcpu);
+}
+
+static u32 avic_get_ga_tag(u32 vm_id, u32 apic_id)
+{
+	struct vcpu_svm *svm = get_vcpu_svm(vm_id, apic_id);
+
+	if (IS_ERR(svm))
+		return PTR_ERR(svm);
+
+	return AVIC_GATAG(vm_id, svm->vcpu.vcpu_id);
+}
+
+static u64 avic_get_apic_backing_page(u32 vm_id, u32 apic_id)
+{
+	struct vcpu_svm *svm = get_vcpu_svm(vm_id, apic_id);
+
+	if (IS_ERR(svm))
+		return PTR_ERR(svm);
+
+	return __sme_set(page_to_phys(svm->avic_backing_page));
+}
 
 const struct amd_iommu_svm_ops svm_ops = {
 	.ga_log_notifier = avic_ga_log_notifier,
+	.get_ga_tag = avic_get_ga_tag,
+	.get_apic_backing_page = avic_get_apic_backing_page,
 };
 
 /*
