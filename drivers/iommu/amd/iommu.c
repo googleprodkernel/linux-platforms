@@ -1716,7 +1716,7 @@ static int setup_gcr3_table(struct gcr3_tbl_info *gcr3_info,
 	if (gcr3_info->gcr3_tbl)
 		return -EBUSY;
 
-	gcr3_info->gcr3_tbl = alloc_pgtable_page(nid, GFP_KERNEL);
+	gcr3_info->gcr3_tbl = alloc_pgtable_page(nid, GFP_ATOMIC);
 	if (gcr3_info->gcr3_tbl == NULL)
 		return -ENOMEM;
 
