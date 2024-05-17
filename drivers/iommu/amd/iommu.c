@@ -1858,7 +1858,7 @@ int amd_iommu_complete_ppr(struct pci_dev *pdev, u32 pasid,
  *
  ****************************************************************************/
 
-static u16 domain_id_alloc(void)
+int amd_iommu_pdom_id_alloc(void)
 {
 	int id;
 
@@ -1959,7 +1959,7 @@ static int setup_gcr3_table(struct gcr3_tbl_info *gcr3_info,
 		return -EBUSY;
 
 	/* Allocate per device domain ID */
-	gcr3_info->domid = domain_id_alloc();
+	gcr3_info->domid = amd_iommu_pdom_id_alloc();
 
 	gcr3_info->gcr3_tbl = alloc_pgtable_page(nid, GFP_KERNEL);
 	if (gcr3_info->gcr3_tbl == NULL) {
@@ -2472,7 +2472,7 @@ static struct protection_domain *protection_domain_alloc(unsigned int type)
 	if (!domain)
 		return NULL;
 
-	domain->id = domain_id_alloc();
+	domain->id = amd_iommu_pdom_id_alloc();
 	if (!domain->id)
 		goto out_err;
 
