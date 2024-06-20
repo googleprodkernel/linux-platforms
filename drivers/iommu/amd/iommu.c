@@ -2368,15 +2368,6 @@ static void do_detach(struct iommu_dev_data *dev_data)
 	struct protection_domain *domain = dev_data->domain;
 	struct amd_iommu *iommu = get_amd_iommu_from_dev_data(dev_data);
 
-	/* Clear GCR3 table */
-	if (domain->pd_mode == PD_MODE_V2) {
-		update_gcr3(dev_data, 0, 0, false);
-		free_gcr3_table(&dev_data->gcr3_info);
-	}
-
-	/* Update data structures */
-	dev_data->domain = NULL;
-	list_del(&dev_data->list);
 	clear_dte_entry(iommu, dev_data);
 	clone_aliases(iommu, dev_data->dev);
 
@@ -2386,6 +2377,16 @@ static void do_detach(struct iommu_dev_data *dev_data)
 	/* Flush IOTLB and wait for the flushes to finish */
 	amd_iommu_domain_flush_all(domain);
 
+
+	/* Clear GCR3 table */
+	if (domain->pd_mode == PD_MODE_V2) {
+		update_gcr3(dev_data, 0, 0, false);
+		free_gcr3_table(&dev_data->gcr3_info);
+	}
+
+	/* Update data structures */
+	dev_data->domain = NULL;
+	list_del(&dev_data->list);
 	/* decrease reference counters - needs to happen after the flushes */
 	domain->dev_iommu[iommu->index] -= 1;
 	domain->dev_cnt                 -= 1;
