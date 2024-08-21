@@ -1101,7 +1101,7 @@ static bool __copy_device_table(struct amd_iommu *iommu)
 
 	for (devid = 0; devid <= pci_seg->last_bdf; ++devid) {
 		pci_seg->old_dev_tbl_cpy[devid] = old_devtb[devid];
-		dom_id = old_devtb[devid].data[1] & DEV_DOMID_MASK;
+		dom_id = old_devtb[devid].data[1] & DTE_DOMID_MASK;
 		dte_v = old_devtb[devid].data[0] & DTE_FLAG_V;
 
 		if (dte_v && dom_id) {
