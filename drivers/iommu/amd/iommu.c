@@ -2467,33 +2467,42 @@ static int protection_domain_init_v2(struct protection_domain *pdom)
 
 static struct protection_domain *protection_domain_alloc(unsigned int type)
 {
-	struct io_pgtable_ops *pgtbl_ops;
 	struct protection_domain *domain;
-	int pgtable;
-	int ret;
 
 	domain = kzalloc(sizeof(*domain), GFP_KERNEL);
 	if (!domain)
 		return NULL;
 
 	domain->id = amd_iommu_pdom_id_alloc();
-	if (!domain->id)
-		goto out_err;
+	if (!domain->id) {
+		kfree(domain);
+		return NULL;
+	}
 
 	spin_lock_init(&domain->lock);
 	INIT_LIST_HEAD(&domain->dev_list);
 	domain->nid = NUMA_NO_NODE;
 
+	return domain;
+}
+
+static int pdom_setup_pgtable(struct protection_domain *domain,
+			      unsigned int type)
+{
+	struct io_pgtable_ops *pgtbl_ops;
+	int pgtable;
+	int ret;
+
 	switch (type) {
 	/* No need to allocate io pgtable ops in passthrough mode */
 	case IOMMU_DOMAIN_IDENTITY:
-		return domain;
+		return 0;
 	case IOMMU_DOMAIN_DMA:
 	case IOMMU_DOMAIN_UNMANAGED:
 		pgtable = amd_iommu_pgtable;
 		break;
 	default:
-		goto out_err;
+		return -EINVAL;
 	}
 
 	switch (pgtable) {
@@ -2504,21 +2513,14 @@ static struct protection_domain *protection_domain_alloc(unsigned int type)
 		ret = protection_domain_init_v2(domain);
 		break;
 	default:
-		ret = -EINVAL;
-		break;
+		return -EINVAL;
 	}
-
-	if (ret)
-		goto out_err;
-
-	pgtbl_ops = alloc_io_pgtable_ops(pgtable, &domain->iop.pgtbl_cfg, domain);
+	pgtbl_ops =
+		alloc_io_pgtable_ops(pgtable, &domain->iop.pgtbl_cfg, domain);
 	if (!pgtbl_ops)
-		goto out_err;
+		return -ENOMEM;
 
-	return domain;
-out_err:
-	protection_domain_free(domain);
-	return NULL;
+	return 0;
 }
 
 static inline u64 dma_max_address(void)
@@ -2541,6 +2543,7 @@ static struct iommu_domain *do_iommu_domain_alloc(unsigned int type,
 	bool dirty_tracking = flags & IOMMU_HWPT_ALLOC_DIRTY_TRACKING;
 	struct protection_domain *domain;
 	struct amd_iommu *iommu = NULL;
+	int ret;
 
 	if (dev)
 		iommu = get_amd_iommu_from_dev(dev);
@@ -2558,6 +2561,13 @@ static struct iommu_domain *do_iommu_domain_alloc(unsigned int type,
 	domain = protection_domain_alloc(type);
 	if (!domain)
 		return ERR_PTR(-ENOMEM);
+
+	ret = pdom_setup_pgtable(domain, type);
+	if (ret) {
+		protection_domain_free(domain);
+		kfree(domain);
+		return ERR_PTR(ret);
+	}
 
 	domain->domain.geometry.aperture_start = 0;
 	domain->domain.geometry.aperture_end   = dma_max_address();
