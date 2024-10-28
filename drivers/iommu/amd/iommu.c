@@ -79,6 +79,9 @@ struct kmem_cache *amd_iommu_irq_cache;
 
 static void detach_device(struct device *dev);
 
+static int amd_iommu_attach_device(struct iommu_domain *dom,
+				   struct device *dev);
+
 static void set_dte_entry(struct amd_iommu *iommu,
 			  struct iommu_dev_data *dev_data);
 
@@ -2460,6 +2463,13 @@ static int protection_domain_init_v2(struct protection_domain *pdom)
 	return 0;
 }
 
+static void protection_domain_init(struct protection_domain *domain, int nid)
+{
+	spin_lock_init(&domain->lock);
+	INIT_LIST_HEAD(&domain->dev_list);
+        domain->nid = nid;
+}
+
 static struct protection_domain *protection_domain_alloc(unsigned int type)
 {
 	struct protection_domain *domain;
@@ -2474,9 +2484,7 @@ static struct protection_domain *protection_domain_alloc(unsigned int type)
 		return NULL;
 	}
 
-	spin_lock_init(&domain->lock);
-	INIT_LIST_HEAD(&domain->dev_list);
-	domain->nid = NUMA_NO_NODE;
+	protection_domain_init(domain, NUMA_NO_NODE);
 
 	return domain;
 }
@@ -2645,6 +2653,25 @@ static void amd_iommu_domain_free(struct iommu_domain *dom)
 	spin_unlock_irqrestore(&domain->lock, flags);
 
 	protection_domain_free(domain);
+}
+
+static struct protection_domain identity_domain;
+
+static const struct iommu_domain_ops identity_domain_ops = {
+	.attach_dev = amd_iommu_attach_device,
+};
+
+void amd_iommu_init_identity_domain(void)
+{
+	struct iommu_domain *domain = &identity_domain.domain;
+
+	domain->type = IOMMU_DOMAIN_IDENTITY;
+	domain->ops = &identity_domain_ops;
+	domain->owner = &amd_iommu_ops;
+
+	identity_domain.id = amd_iommu_pdom_id_alloc();
+
+	protection_domain_init(&identity_domain, NUMA_NO_NODE);
 }
 
 static int amd_iommu_attach_device(struct iommu_domain *dom,
@@ -2990,6 +3017,7 @@ static const struct iommu_dirty_ops amd_dirty_ops = {
 
 const struct iommu_ops amd_iommu_ops = {
 	.capable = amd_iommu_capable,
+	.identity_domain = &identity_domain.domain,
 	.domain_alloc = amd_iommu_domain_alloc,
 	.domain_alloc_user = amd_iommu_domain_alloc_user,
 	.probe_device = amd_iommu_probe_device,
