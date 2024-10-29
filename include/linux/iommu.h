@@ -1229,7 +1229,7 @@ static inline struct iommu_domain *iommu_domain_alloc(const struct bus_type *bus
 	return NULL;
 }
 
-struct iommu_domain *iommu_paging_domain_alloc_flags(struct device *dev,
+static inline struct iommu_domain *iommu_paging_domain_alloc_flags(struct device *dev,
 						     unsigned int flags)
 {
 	return ERR_PTR(-ENODEV);
