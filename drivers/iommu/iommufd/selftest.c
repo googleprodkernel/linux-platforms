@@ -111,11 +111,23 @@ struct mock_iommu_domain {
 	struct xarray pfns;
 };
 
+static inline struct mock_iommu_domain *
+to_mock_domain(struct iommu_domain *domain)
+{
+	return container_of(domain, struct mock_iommu_domain, domain);
+}
+
 struct mock_iommu_domain_nested {
 	struct iommu_domain domain;
 	struct mock_iommu_domain *parent;
 	u32 iotlb[MOCK_NESTED_DOMAIN_IOTLB_NUM];
 };
+
+static inline struct mock_iommu_domain_nested *
+to_mock_nested(struct iommu_domain *domain)
+{
+	return container_of(domain, struct mock_iommu_domain_nested, domain);
+}
 
 enum selftest_obj_type {
 	TYPE_IDEV,
@@ -125,6 +137,11 @@ struct mock_dev {
 	struct device dev;
 	unsigned long flags;
 };
+
+static inline struct mock_dev *to_mock_dev(struct device *dev)
+{
+	return container_of(dev, struct mock_dev, dev);
+}
 
 struct selftest_obj {
 	struct iommufd_object obj;
@@ -139,10 +156,15 @@ struct selftest_obj {
 	};
 };
 
+static inline struct selftest_obj *to_selftest_obj(struct iommufd_object *obj)
+{
+	return container_of(obj, struct selftest_obj, obj);
+}
+
 static int mock_domain_nop_attach(struct iommu_domain *domain,
 				  struct device *dev)
 {
-	struct mock_dev *mdev = container_of(dev, struct mock_dev, dev);
+	struct mock_dev *mdev = to_mock_dev(dev);
 
 	if (domain->dirty_ops && (mdev->flags & MOCK_FLAGS_DEVICE_NO_DIRTY))
 		return -EINVAL;
@@ -177,8 +199,7 @@ static void *mock_domain_hw_info(struct device *dev, u32 *length, u32 *type)
 static int mock_domain_set_dirty_tracking(struct iommu_domain *domain,
 					  bool enable)
 {
-	struct mock_iommu_domain *mock =
-		container_of(domain, struct mock_iommu_domain, domain);
+	struct mock_iommu_domain *mock = to_mock_domain(domain);
 	unsigned long flags = mock->flags;
 
 	if (enable && !domain->dirty_ops)
@@ -227,8 +248,7 @@ static int mock_domain_read_and_clear_dirty(struct iommu_domain *domain,
 					    unsigned long flags,
 					    struct iommu_dirty_bitmap *dirty)
 {
-	struct mock_iommu_domain *mock =
-		container_of(domain, struct mock_iommu_domain, domain);
+	struct mock_iommu_domain *mock = to_mock_domain(domain);
 	unsigned long end = iova + size;
 	void *ent;
 
@@ -265,7 +285,7 @@ const struct iommu_dirty_ops dirty_ops = {
 
 static struct iommu_domain *mock_domain_alloc_paging(struct device *dev)
 {
-	struct mock_dev *mdev = container_of(dev, struct mock_dev, dev);
+	struct mock_dev *mdev = to_mock_dev(dev);
 	struct mock_iommu_domain *mock;
 
 	mock = kzalloc(sizeof(*mock), GFP_KERNEL);
@@ -311,7 +331,7 @@ mock_domain_alloc_user(struct device *dev, u32 flags,
 
 	/* must be mock_domain */
 	if (!parent) {
-		struct mock_dev *mdev = container_of(dev, struct mock_dev, dev);
+		struct mock_dev *mdev = to_mock_dev(dev);
 		bool has_dirty_flag = flags & IOMMU_HWPT_ALLOC_DIRTY_TRACKING;
 		bool no_dirty_ops = mdev->flags & MOCK_FLAGS_DEVICE_NO_DIRTY;
 		struct iommu_domain *domain;
@@ -325,8 +345,7 @@ mock_domain_alloc_user(struct device *dev, u32 flags,
 		if (!domain)
 			return ERR_PTR(-ENOMEM);
 		if (has_dirty_flag)
-			container_of(domain, struct mock_iommu_domain, domain)
-				->domain.dirty_ops = &dirty_ops;
+			domain->dirty_ops = &dirty_ops;
 		return domain;
 	}
 
@@ -336,7 +355,7 @@ mock_domain_alloc_user(struct device *dev, u32 flags,
 	if (!parent || parent->ops != mock_ops.default_domain_ops)
 		return ERR_PTR(-EINVAL);
 
-	mock_parent = container_of(parent, struct mock_iommu_domain, domain);
+	mock_parent = to_mock_domain(parent);
 	if (!mock_parent)
 		return ERR_PTR(-EINVAL);
 
@@ -350,8 +369,7 @@ mock_domain_alloc_user(struct device *dev, u32 flags,
 
 static void mock_domain_free(struct iommu_domain *domain)
 {
-	struct mock_iommu_domain *mock =
-		container_of(domain, struct mock_iommu_domain, domain);
+	struct mock_iommu_domain *mock = to_mock_domain(domain);
 
 	WARN_ON(!xa_empty(&mock->pfns));
 	kfree(mock);
@@ -362,8 +380,7 @@ static int mock_domain_map_pages(struct iommu_domain *domain,
 				 size_t pgsize, size_t pgcount, int prot,
 				 gfp_t gfp, size_t *mapped)
 {
-	struct mock_iommu_domain *mock =
-		container_of(domain, struct mock_iommu_domain, domain);
+	struct mock_iommu_domain *mock = to_mock_domain(domain);
 	unsigned long flags = MOCK_PFN_START_IOVA;
 	unsigned long start_iova = iova;
 
@@ -414,8 +431,7 @@ static size_t mock_domain_unmap_pages(struct iommu_domain *domain,
 				      size_t pgcount,
 				      struct iommu_iotlb_gather *iotlb_gather)
 {
-	struct mock_iommu_domain *mock =
-		container_of(domain, struct mock_iommu_domain, domain);
+	struct mock_iommu_domain *mock = to_mock_domain(domain);
 	bool first = true;
 	size_t ret = 0;
 	void *ent;
@@ -456,8 +472,7 @@ static size_t mock_domain_unmap_pages(struct iommu_domain *domain,
 static phys_addr_t mock_domain_iova_to_phys(struct iommu_domain *domain,
 					    dma_addr_t iova)
 {
-	struct mock_iommu_domain *mock =
-		container_of(domain, struct mock_iommu_domain, domain);
+	struct mock_iommu_domain *mock = to_mock_domain(domain);
 	void *ent;
 
 	WARN_ON(iova % MOCK_IO_PAGE_SIZE);
@@ -468,7 +483,7 @@ static phys_addr_t mock_domain_iova_to_phys(struct iommu_domain *domain,
 
 static bool mock_domain_capable(struct device *dev, enum iommu_cap cap)
 {
-	struct mock_dev *mdev = container_of(dev, struct mock_dev, dev);
+	struct mock_dev *mdev = to_mock_dev(dev);
 
 	switch (cap) {
 	case IOMMU_CAP_CACHE_COHERENCY:
@@ -548,18 +563,14 @@ static const struct iommu_ops mock_ops = {
 
 static void mock_domain_free_nested(struct iommu_domain *domain)
 {
-	struct mock_iommu_domain_nested *mock_nested =
-		container_of(domain, struct mock_iommu_domain_nested, domain);
-
-	kfree(mock_nested);
+	kfree(to_mock_nested(domain));
 }
 
 static int
 mock_domain_cache_invalidate_user(struct iommu_domain *domain,
 				  struct iommu_user_data_array *array)
 {
-	struct mock_iommu_domain_nested *mock_nested =
-		container_of(domain, struct mock_iommu_domain_nested, domain);
+	struct mock_iommu_domain_nested *mock_nested = to_mock_nested(domain);
 	struct iommu_hwpt_invalidate_selftest inv;
 	u32 processed = 0;
 	int i = 0, j;
@@ -634,7 +645,7 @@ get_md_pagetable(struct iommufd_ucmd *ucmd, u32 mockpt_id,
 		iommufd_put_object(ucmd->ictx, &hwpt->obj);
 		return ERR_PTR(-EINVAL);
 	}
-	*mock = container_of(hwpt->domain, struct mock_iommu_domain, domain);
+	*mock = to_mock_domain(hwpt->domain);
 	return hwpt;
 }
 
@@ -652,14 +663,13 @@ get_md_pagetable_nested(struct iommufd_ucmd *ucmd, u32 mockpt_id,
 		iommufd_put_object(ucmd->ictx, &hwpt->obj);
 		return ERR_PTR(-EINVAL);
 	}
-	*mock_nested = container_of(hwpt->domain,
-				    struct mock_iommu_domain_nested, domain);
+	*mock_nested = to_mock_nested(hwpt->domain);
 	return hwpt;
 }
 
 static void mock_dev_release(struct device *dev)
 {
-	struct mock_dev *mdev = container_of(dev, struct mock_dev, dev);
+	struct mock_dev *mdev = to_mock_dev(dev);
 
 	atomic_dec(&mock_dev_num);
 	kfree(mdev);
@@ -786,7 +796,7 @@ static int iommufd_test_mock_domain_replace(struct iommufd_ucmd *ucmd,
 	if (IS_ERR(dev_obj))
 		return PTR_ERR(dev_obj);
 
-	sobj = container_of(dev_obj, struct selftest_obj, obj);
+	sobj = to_selftest_obj(dev_obj);
 	if (sobj->type != TYPE_IDEV) {
 		rc = -EINVAL;
 		goto out_dev_obj;
@@ -924,8 +934,7 @@ static int iommufd_test_md_check_iotlb(struct iommufd_ucmd *ucmd,
 	if (IS_ERR(hwpt))
 		return PTR_ERR(hwpt);
 
-	mock_nested = container_of(hwpt->domain,
-				   struct mock_iommu_domain_nested, domain);
+	mock_nested = to_mock_nested(hwpt->domain);
 
 	if (iotlb_id > MOCK_NESTED_DOMAIN_IOTLB_ID_MAX ||
 	    mock_nested->iotlb[iotlb_id] != iotlb)
@@ -1405,7 +1414,7 @@ static int iommufd_test_trigger_iopf(struct iommufd_ucmd *ucmd,
 
 void iommufd_selftest_destroy(struct iommufd_object *obj)
 {
-	struct selftest_obj *sobj = container_of(obj, struct selftest_obj, obj);
+	struct selftest_obj *sobj = to_selftest_obj(obj);
 
 	switch (sobj->type) {
 	case TYPE_IDEV:
