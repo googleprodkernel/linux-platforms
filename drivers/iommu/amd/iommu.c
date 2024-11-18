@@ -88,6 +88,19 @@ static void set_dte_entry(struct amd_iommu *iommu,
  *
  ****************************************************************************/
 
+static __always_inline void amd_iommu_atomic128_set(__int128 *ptr, __int128 val)
+{
+	/*
+	 * Note:
+	 * We use arch_cmpxchg128_local() because:
+	 * - Need cmpxchg16b instruction mainly for 128-bit store to DTE
+	 *   (not necessary for cmpxchg since this function is already
+	 *   protected by a spin_lock for this DTE).
+	 * - Neither need LOCK_PREFIX nor try loop because of the spin_lock.
+	 */
+	arch_cmpxchg128_local(ptr, *ptr, val);
+}
+
 static inline bool pdom_is_v2_pgtbl_mode(struct protection_domain *pdom)
 {
 	return (pdom && (pdom->pd_mode == PD_MODE_V2));
@@ -198,6 +211,7 @@ static struct iommu_dev_data *alloc_dev_data(struct amd_iommu *iommu, u16 devid)
 		return NULL;
 
 	spin_lock_init(&dev_data->lock);
+	spin_lock_init(&dev_data->dte_lock);
 	dev_data->devid = devid;
 	ratelimit_default_init(&dev_data->rs);
 
