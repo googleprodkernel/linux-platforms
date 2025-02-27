@@ -237,7 +237,6 @@ void amd_iommu_domain_set_pgtable(struct protection_domain *domain,
 struct dev_table_entry *get_dev_table(struct amd_iommu *iommu);
 
 extern bool amd_iommu_snp_en;
-#endif
 
 struct dev_table_entry *amd_iommu_get_ivhd_dte_flags(u16 segid, u16 devid);
 struct iommu_dev_data *search_dev_data(struct amd_iommu *iommu, u16 devid);
@@ -285,3 +284,5 @@ amd_iommu_alloc_domain_nested(struct iommufd_viommu *viommu, u32 flags,
 /* Guest ID for vIOMMU */
 int amd_iommu_gid_alloc(void);
 void amd_iommu_gid_free(int gid);
+
+#endif /* AMD_IOMMU_H */
