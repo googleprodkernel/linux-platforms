@@ -1913,8 +1913,8 @@ iopt_pages_get_exact_access(struct iopt_pages *pages, unsigned long index,
  * This should be undone through a matching call to iopt_area_remove_access()
  */
 int iopt_area_add_access(struct iopt_area *area, unsigned long start_index,
-			  unsigned long last_index, struct page **out_pages,
-			  unsigned int flags)
+			 unsigned long last_index, struct page **out_pages,
+			 unsigned int flags)
 {
 	struct iopt_pages *pages = area->pages;
 	struct iopt_pages_access *access;
