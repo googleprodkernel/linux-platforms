@@ -1101,9 +1101,8 @@ static int iommufd_test_md_check_refs(struct iommufd_ucmd *ucmd,
 	return 0;
 }
 
-static int iommufd_test_md_check_iotlb(struct iommufd_ucmd *ucmd,
-				       u32 mockpt_id, unsigned int iotlb_id,
-				       u32 iotlb)
+static int iommufd_test_md_check_iotlb(struct iommufd_ucmd *ucmd, u32 mockpt_id,
+				       unsigned int iotlb_id, u32 iotlb)
 {
 	struct mock_iommu_domain_nested *mock_nested;
 	struct iommufd_hw_pagetable *hwpt;
@@ -1376,7 +1375,7 @@ static int iommufd_test_access_pages(struct iommufd_ucmd *ucmd,
 	int rc;
 
 	/* Prevent syzkaller from triggering a WARN_ON in kvzalloc() */
-	if (length > 16*1024*1024)
+	if (length > 16 * 1024 * 1024)
 		return -ENOMEM;
 
 	if (flags & ~(MOCK_FLAGS_ACCESS_WRITE | MOCK_FLAGS_ACCESS_SYZ))
@@ -1469,7 +1468,7 @@ static int iommufd_test_access_rw(struct iommufd_ucmd *ucmd,
 	int rc;
 
 	/* Prevent syzkaller from triggering a WARN_ON in kvzalloc() */
-	if (length > 16*1024*1024)
+	if (length > 16 * 1024 * 1024)
 		return -ENOMEM;
 
 	if (flags & ~(MOCK_ACCESS_RW_WRITE | MOCK_ACCESS_RW_SLOW_PATH |
@@ -1587,7 +1586,7 @@ out_put:
 static int iommufd_test_trigger_iopf(struct iommufd_ucmd *ucmd,
 				     struct iommu_test_cmd *cmd)
 {
-	struct iopf_fault event = { };
+	struct iopf_fault event = {};
 	struct iommufd_device *idev;
 
 	idev = iommufd_get_device(ucmd, cmd->trigger_iopf.dev_id);
@@ -1757,8 +1756,8 @@ int __init iommufd_test_init(void)
 		goto err_bus;
 
 	rc = iommu_device_register_bus(&mock_iommu.iommu_dev, &mock_ops,
-				  &iommufd_mock_bus_type.bus,
-				  &iommufd_mock_bus_type.nb);
+				       &iommufd_mock_bus_type.bus,
+				       &iommufd_mock_bus_type.nb);
 	if (rc)
 		goto err_sysfs;
 
