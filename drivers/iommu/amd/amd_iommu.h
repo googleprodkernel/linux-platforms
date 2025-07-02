@@ -37,9 +37,9 @@ unsigned long amd_iommu_v1_unmap_pages(struct io_pgtable_ops *ops,
 				       struct iommu_iotlb_gather *gather);
 
 #ifdef CONFIG_AMD_IOMMU_DEBUGFS
-void amd_iommu_debugfs_setup(struct amd_iommu *iommu);
+void amd_iommu_debugfs_setup(void);
 #else
-static inline void amd_iommu_debugfs_setup(struct amd_iommu *iommu) {}
+static inline void amd_iommu_debugfs_setup(void) {}
 #endif
 
 extern bool amd_iommu_viommu;
