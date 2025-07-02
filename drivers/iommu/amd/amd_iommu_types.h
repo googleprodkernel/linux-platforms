@@ -989,6 +989,13 @@ struct ivhd_dte_flags {
 };
 
 /*
+ * Structure defining one entry in the command buffer
+ */
+struct iommu_cmd {
+	u32 data[4];
+};
+
+/*
  * One entry for unity mappings parsed out of the ACPI table.
  */
 struct unity_map_entry {
