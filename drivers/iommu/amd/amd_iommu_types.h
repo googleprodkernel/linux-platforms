@@ -1159,6 +1159,10 @@ struct amd_iommu_vdevice {
 	struct iommufd_vdevice core;
 };
 
+struct amd_iommu_hw_queue {
+	struct iommufd_hw_queue core;
+};
+
 #ifdef CONFIG_IRQ_REMAP
 extern struct amd_irte_ops irte_32_ops;
 extern struct amd_irte_ops irte_128_ops;
