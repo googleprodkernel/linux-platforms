@@ -1865,7 +1865,7 @@ void amd_iommu_domain_flush_pages(struct protection_domain *domain,
 }
 
 /* Flush the whole IO/TLB for a given protection domain - including PDE */
-static void amd_iommu_domain_flush_all(struct protection_domain *domain)
+void amd_iommu_domain_flush_all(struct protection_domain *domain)
 {
 	amd_iommu_domain_flush_pages(domain, 0,
 				     CMD_INV_IOMMU_ALL_PAGES_ADDRESS);

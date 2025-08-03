@@ -428,6 +428,13 @@
 #define DTE_GPT_LEVEL_SHIFT	54
 #define DTE_GPT_LEVEL_MASK	GENMASK_ULL(55, 54)
 
+/* vIOMMU bit fields */
+#define DTE_VIOMMU_EN_SHIFT		15
+#define DTE_VIOMMU_GDEVICEID_SHIFT	16
+#define DTE_VIOMMU_GDEVICEID_MASK	0xFFFF
+#define DTE_VIOMMU_GUESTID_SHIFT	32
+#define DTE_VIOMMU_GUESTID_MASK		0xFFFF
+
 #define GCR3_VALID		0x01ULL
 
 /* DTE[128:179] | DTE[184:191] */
@@ -903,6 +910,9 @@ struct iommu_dev_data {
 	bool defer_attach;
 
 	struct ratelimit_state rs;        /* Ratelimit IOPF messages */
+
+	u16 gid;
+	u16 gDevId;
 };
 
 /* Map HPET and IOAPIC ids to the devid used by the IOMMU */
@@ -1130,6 +1140,10 @@ struct amd_irte_ops {
 	void (*set_allocated)(struct irq_remap_table *, int);
 	bool (*is_allocated)(struct irq_remap_table *, int);
 	void (*clear_allocated)(struct irq_remap_table *, int);
+};
+
+struct amd_iommu_vdevice {
+	struct iommufd_vdevice core;
 };
 
 #ifdef CONFIG_IRQ_REMAP

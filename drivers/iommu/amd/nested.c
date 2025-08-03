@@ -157,6 +157,7 @@ static void set_dte_nested(struct amd_iommu *iommu,
 			   struct iommu_domain *dom,
 			   struct iommu_dev_data *dev_data)
 {
+	u64 tmp;
 	struct protection_domain *parent;
 	struct dev_table_entry new = {0};
 	struct nested_domain *ndom = to_ndomain(dom);
@@ -191,6 +192,17 @@ static void set_dte_nested(struct amd_iommu *iommu,
 
 	/* Guest paging mode */
 	new.data[2] |= gdte->dte[2] & DTE_GPT_LEVEL_MASK;
+
+	/* vImuEn */
+	new.data[3] |= 1ULL << DTE_VIOMMU_EN_SHIFT;
+
+	/* GDeviceID */
+	tmp = dev_data->gDevId & DTE_VIOMMU_GDEVICEID_MASK;
+	new.data[3] |= tmp << DTE_VIOMMU_GDEVICEID_SHIFT;
+
+	/* GuestID */
+	tmp = dev_data->gid & DTE_VIOMMU_GUESTID_MASK;
+	new.data[3] |= tmp << DTE_VIOMMU_GUESTID_SHIFT;
 
 	amd_iommu_update_dte(iommu, dev_data, &new);
 }
