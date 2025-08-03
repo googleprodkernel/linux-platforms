@@ -227,6 +227,72 @@ static int _amd_viommu_vdevice_init(struct iommufd_vdevice *vdev)
 	return 0;
 }
 
+static size_t _amd_viommu_get_hw_queue_size(struct iommufd_viommu *viommu,
+					    enum iommu_hw_queue_type queue_type)
+{
+	/* Currently do not support Eventlog B and PPRlog B */
+	if ((queue_type != IOMMU_HW_QUEUE_TYPE_AMD_CMD) &&
+	    (queue_type != IOMMU_HW_QUEUE_TYPE_AMD_EVT) &&
+	    (queue_type != IOMMU_HW_QUEUE_TYPE_AMD_PPR))
+		return 0;
+
+	return HW_QUEUE_STRUCT_SIZE(struct amd_iommu_hw_queue, core);
+}
+
+static int _amd_viommu_hw_queue_init(struct iommufd_hw_queue *hw_queue, u32 index)
+{
+	int ret = 0;
+	u64 val, tmp;
+	u8 __iomem *vfctrl, *vf;
+	struct iommufd_viommu *viommu = hw_queue->viommu;
+	struct amd_iommu_viommu *aviommu = container_of(viommu, struct amd_iommu_viommu, core);
+	struct amd_iommu *iommu = container_of(viommu->iommu_dev, struct amd_iommu, iommu);
+	int gid = aviommu->gid;
+
+	vf = VIOMMU_VF_MMIO_BASE(iommu, gid);
+	vfctrl = VIOMMU_VFCTRL_MMIO_BASE(iommu, gid);
+
+	switch (hw_queue->type) {
+	case IOMMU_HW_QUEUE_TYPE_AMD_CMD:
+	{
+		val = readq(vfctrl + 0x20);
+		val &= ~(0xFFFFFFFFFF00FULL);
+		tmp = (hw_queue->length & 0xFULL);
+		val = tmp | (hw_queue->base_addr & 0xFFFFFFFFFF000ULL);
+
+		writeq(val, vfctrl + 0x20);
+		break;
+	}
+	case IOMMU_HW_QUEUE_TYPE_AMD_EVT:
+	{
+		val = readq(vfctrl + 0x28);
+		val &= ~(0xFFFFFFFFFF00FULL);
+		tmp = (hw_queue->length & 0xFULL);
+		val = tmp | (hw_queue->base_addr & 0xFFFFFFFFFF000ULL);
+		writeq(val, vfctrl + 0x28);
+		break;
+	}
+	case IOMMU_HW_QUEUE_TYPE_AMD_PPR:
+	{
+		val = readq(vfctrl + 0x30);
+		val &= ~(0xFFFFFFFFFF00FULL);
+		tmp = (hw_queue->length & 0xFULL);
+		val = tmp | ((hw_queue->base_addr & 0xFFFFFFFFFF000ULL) << 4);
+		writeq(val, vfctrl + 0x30);
+		break;
+	}
+	default:
+		pr_err("%s: Invalid type (%#x)\n", __func__, hw_queue->type);
+		return -EINVAL;
+	}
+
+	pr_debug("%s: iommu_devid=%#x, gid=%#x, type=%#x, addr=%#llx, len=%#lx, val=%#llx\n",
+		 __func__, iommu->devid, gid, hw_queue->type,
+		 hw_queue->base_addr, hw_queue->length, val);
+
+	return ret;
+}
+
 /*
  * See include/linux/iommufd.h
  * struct iommufd_viommu_ops - vIOMMU specific operations
@@ -236,4 +302,6 @@ static const struct iommufd_viommu_ops amd_viommu_ops = {
 	.destroy = amd_iommufd_viommu_destroy,
 	.vdevice_size = VDEVICE_STRUCT_SIZE(struct amd_iommu_vdevice, core),
 	.vdevice_init = _amd_viommu_vdevice_init,
+	.get_hw_queue_size = _amd_viommu_get_hw_queue_size,
+	.hw_queue_init = _amd_viommu_hw_queue_init,
 };

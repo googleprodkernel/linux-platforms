@@ -1245,6 +1245,9 @@ enum iommu_hw_queue_type {
 	 *   emulated vSMMU's IDR1.CMDQS to log2(huge page size / 16 bytes)
 	 */
 	IOMMU_HW_QUEUE_TYPE_TEGRA241_CMDQV = 1,
+	IOMMU_HW_QUEUE_TYPE_AMD_CMD,
+	IOMMU_HW_QUEUE_TYPE_AMD_EVT,
+	IOMMU_HW_QUEUE_TYPE_AMD_PPR,
 };
 
 /**
