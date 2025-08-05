@@ -185,6 +185,15 @@ struct iommufd_hw_queue {
  *                      the physical location of the guest queue
  *                      If driver has a deinit function to revert what this op
  *                      does, it should set it to the @hw_queue->destroy pointer
+ * @hw_queue_init: Initialize the driver-level structure of a HW queue that
+ *                 is initialized with its core-level structure that holds
+ *                 all the info about a guest queue memory.
+ *                 Driver providing this op indicates that HW accesses the
+ *                 guest queue memory via physical addresses.
+ *                 @index carries the logical HW QUEUE ID per vIOMMU in a
+ *                 guest VM, for a multi-queue model.
+ *                 If driver has a deinit function to revert what this op
+ *                 does, it should set it to the @hw_queue->destroy pointer
  */
 struct iommufd_viommu_ops {
 	void (*destroy)(struct iommufd_viommu *viommu);
@@ -197,9 +206,9 @@ struct iommufd_viommu_ops {
 	int (*vdevice_init)(struct iommufd_vdevice *vdev);
 	size_t (*get_hw_queue_size)(struct iommufd_viommu *viommu,
 				    enum iommu_hw_queue_type queue_type);
-	/* AMD's HW will add hw_queue_init simply using @hw_queue->base_addr */
 	int (*hw_queue_init_phys)(struct iommufd_hw_queue *hw_queue, u32 index,
 				  phys_addr_t base_addr_pa);
+	int (*hw_queue_init)(struct iommufd_hw_queue *hw_queue, u32 index);
 };
 
 #if IS_ENABLED(CONFIG_IOMMUFD)
