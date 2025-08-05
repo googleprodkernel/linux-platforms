@@ -306,14 +306,95 @@ out_free:
 	return ERR_PTR(rc);
 }
 
-int iommufd_hw_queue_alloc_ioctl(struct iommufd_ucmd *ucmd)
+static int _iommufd_hw_queue_init_phys(struct iommufd_ucmd *ucmd,
+				       struct iommufd_viommu *viommu)
 {
 	struct iommu_hw_queue_alloc *cmd = ucmd->cmd;
 	struct iommufd_hw_queue *hw_queue;
-	struct iommufd_viommu *viommu;
 	struct iommufd_access *access;
 	size_t hw_queue_size;
 	phys_addr_t base_pa;
+	int rc;
+
+	hw_queue_size = viommu->ops->get_hw_queue_size(viommu, cmd->type);
+	if (!hw_queue_size)
+		return -EOPNOTSUPP;
+
+	/*
+	 * It is a driver bug for providing a hw_queue_size smaller than the
+	 * core HW queue structure size
+	 */
+	if (WARN_ON_ONCE(hw_queue_size < sizeof(*hw_queue)))
+		return -EOPNOTSUPP;
+
+	hw_queue = (struct iommufd_hw_queue *)_iommufd_object_alloc_ucmd(
+		ucmd, hw_queue_size, IOMMUFD_OBJ_HW_QUEUE);
+	if (IS_ERR(hw_queue))
+		return PTR_ERR(hw_queue);
+
+	access = iommufd_hw_queue_alloc_phys(cmd, viommu, &base_pa);
+	if (IS_ERR(access))
+		return PTR_ERR(access);
+
+	hw_queue->viommu = viommu;
+	refcount_inc(&viommu->obj.users);
+	hw_queue->access = access;
+	hw_queue->type = cmd->type;
+	hw_queue->length = cmd->length;
+	hw_queue->base_addr = cmd->nesting_parent_iova;
+
+	rc = viommu->ops->hw_queue_init_phys(hw_queue, cmd->index, base_pa);
+	if (rc)
+		return rc;
+
+	cmd->out_hw_queue_id = hw_queue->obj.id;
+	return rc;
+}
+
+static int _iommufd_hw_queue_init(struct iommufd_ucmd *ucmd,
+				  struct iommufd_viommu *viommu)
+{
+	struct iommu_hw_queue_alloc *cmd = ucmd->cmd;
+	struct iommufd_hw_queue *hw_queue;
+	size_t hw_queue_size;
+	int rc;
+
+	printk("DEBUG: %s\n", __func__);
+	hw_queue_size = viommu->ops->get_hw_queue_size(viommu, cmd->type);
+	if (!hw_queue_size)
+		return -EOPNOTSUPP;
+
+	/*
+	 * It is a driver bug for providing a hw_queue_size smaller than the
+	 * core HW queue structure size
+	 */
+	if (WARN_ON_ONCE(hw_queue_size < sizeof(*hw_queue)))
+		return -EOPNOTSUPP;
+
+	hw_queue = (struct iommufd_hw_queue *)_iommufd_object_alloc_ucmd(
+		ucmd, hw_queue_size, IOMMUFD_OBJ_HW_QUEUE);
+	if (IS_ERR(hw_queue))
+		return PTR_ERR(hw_queue);
+
+	hw_queue->viommu = viommu;
+	refcount_inc(&viommu->obj.users);
+	hw_queue->access = NULL;
+	hw_queue->type = cmd->type;
+	hw_queue->length = cmd->length;
+	hw_queue->base_addr = cmd->nesting_parent_iova;
+
+	rc = viommu->ops->hw_queue_init(hw_queue, cmd->index);
+	if (rc)
+		return rc;
+
+	cmd->out_hw_queue_id = hw_queue->obj.id;
+	return rc;
+}
+
+int iommufd_hw_queue_alloc_ioctl(struct iommufd_ucmd *ucmd)
+{
+	struct iommu_hw_queue_alloc *cmd = ucmd->cmd;
+	struct iommufd_viommu *viommu;
 	u64 last;
 	int rc;
 
@@ -329,52 +410,22 @@ int iommufd_hw_queue_alloc_ioctl(struct iommufd_ucmd *ucmd)
 	if (IS_ERR(viommu))
 		return PTR_ERR(viommu);
 
-	if (!viommu->ops || !viommu->ops->get_hw_queue_size ||
-	    !viommu->ops->hw_queue_init_phys) {
+	if (!viommu->ops || !viommu->ops->get_hw_queue_size) {
 		rc = -EOPNOTSUPP;
 		goto out_put_viommu;
 	}
 
-	hw_queue_size = viommu->ops->get_hw_queue_size(viommu, cmd->type);
-	if (!hw_queue_size) {
+	printk("DEBUG: %s\n", __func__);
+	if (viommu->ops->hw_queue_init_phys)
+		rc = _iommufd_hw_queue_init_phys(ucmd, viommu);
+	else if (viommu->ops->hw_queue_init)
+		rc = _iommufd_hw_queue_init(ucmd, viommu);
+	else
 		rc = -EOPNOTSUPP;
-		goto out_put_viommu;
-	}
 
-	/*
-	 * It is a driver bug for providing a hw_queue_size smaller than the
-	 * core HW queue structure size
-	 */
-	if (WARN_ON_ONCE(hw_queue_size < sizeof(*hw_queue))) {
-		rc = -EOPNOTSUPP;
-		goto out_put_viommu;
-	}
-
-	hw_queue = (struct iommufd_hw_queue *)_iommufd_object_alloc_ucmd(
-		ucmd, hw_queue_size, IOMMUFD_OBJ_HW_QUEUE);
-	if (IS_ERR(hw_queue)) {
-		rc = PTR_ERR(hw_queue);
-		goto out_put_viommu;
-	}
-
-	access = iommufd_hw_queue_alloc_phys(cmd, viommu, &base_pa);
-	if (IS_ERR(access)) {
-		rc = PTR_ERR(access);
-		goto out_put_viommu;
-	}
-
-	hw_queue->viommu = viommu;
-	refcount_inc(&viommu->obj.users);
-	hw_queue->access = access;
-	hw_queue->type = cmd->type;
-	hw_queue->length = cmd->length;
-	hw_queue->base_addr = cmd->nesting_parent_iova;
-
-	rc = viommu->ops->hw_queue_init_phys(hw_queue, cmd->index, base_pa);
 	if (rc)
 		goto out_put_viommu;
 
-	cmd->out_hw_queue_id = hw_queue->obj.id;
 	rc = iommufd_ucmd_respond(ucmd, sizeof(*cmd));
 
 out_put_viommu:
