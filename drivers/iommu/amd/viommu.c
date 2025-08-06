@@ -97,6 +97,27 @@ static int __init viommu_vf_vfcntl_init(struct amd_iommu *iommu)
 }
 
 /*
+ * Returns VF MMIO BAR offset for the give guest ID which will be
+ * mapped to guest vIOMMU 3rd 4K MMIO address
+ */
+u64 amd_viommu_get_vfmmio_addr(struct iommu_viommu_amd *data)
+{
+	unsigned int iommu_devid = data->iommu_devid;
+	u64 addr;
+//SURAVEE: TODO: Replace get_amd_iommu_from_devid()
+	struct amd_iommu *iommu = get_amd_iommu_from_devid(iommu_devid);
+
+	if (!iommu)
+		return -ENODEV;
+
+	/* TODO: Add check for sVIOMMU and set gid[bit 15] */
+	addr = iommu->vf_base_phys + data->out_gid * VIOMMU_VF_MMIO_ENTRY_SIZE;
+
+	return addr;
+}
+EXPORT_SYMBOL(amd_viommu_get_vfmmio_addr);
+
+/*
  * When IOMMU Virtualization is enabled, host software must:
  *	- allocate system memory for IOMMU private space
  *	- program IOMMU as an I/O device in Device Table
@@ -142,7 +163,7 @@ static int alloc_private_vm_region(struct amd_iommu *iommu, u64 **entry,
 	pr_debug("%s: entry=%#llx(%#llx), addr=%#llx\n", __func__,
 		 (unsigned long  long)*entry, iommu_virt_to_phys(*entry), addr);
 
-	ret = amd_iommu_v1_map_pages(&iommu->viommu_pdom->iop.pgtbl.ops, addr,
+	ret = amd_iommu_v1_map_pages(&iommu->viommu_pdom->iop.iop.ops, addr,
 				     iommu_virt_to_phys(*entry), PAGE_SIZE, (size / PAGE_SIZE),
 				     IOMMU_PROT_IR | IOMMU_PROT_IW, GFP_KERNEL, NULL);
 	if (ret)
@@ -165,7 +186,7 @@ static void free_private_vm_region(struct amd_iommu *iommu, u64 **entry,
 	if (!iommu || !iommu->viommu_pdom)
 		return;
 
-	ret = amd_iommu_v1_unmap_pages(&iommu->viommu_pdom->iop.pgtbl.ops,
+	ret = amd_iommu_v1_unmap_pages(&iommu->viommu_pdom->iop.iop.ops,
 				       addr, PAGE_SIZE, (size / PAGE_SIZE), &gather);
 	if (ret)
 		amd_iommu_iotlb_sync(&iommu->viommu_pdom->domain, &gather);
