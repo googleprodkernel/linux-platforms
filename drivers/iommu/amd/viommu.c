@@ -97,6 +97,27 @@ static int __init viommu_vf_vfcntl_init(struct amd_iommu *iommu)
 }
 
 /*
+ * Returns VF MMIO BAR offset for the give guest ID which will be
+ * mapped to guest vIOMMU 3rd 4K MMIO address
+ */
+u64 amd_viommu_get_vfmmio_addr(struct iommu_viommu_amd *data)
+{
+	unsigned int iommu_devid = data->iommu_devid;
+	u64 addr;
+//SURAVEE: TODO: Replace get_amd_iommu_from_devid()
+	struct amd_iommu *iommu = get_amd_iommu_from_devid(iommu_devid);
+
+	if (!iommu)
+		return -ENODEV;
+
+	/* TODO: Add check for sVIOMMU and set gid[bit 15] */
+	addr = iommu->vf_base_phys + data->out_gid * VIOMMU_VF_MMIO_ENTRY_SIZE;
+
+	return addr;
+}
+EXPORT_SYMBOL(amd_viommu_get_vfmmio_addr);
+
+/*
  * When IOMMU Virtualization is enabled, host software must:
  *	- allocate system memory for IOMMU private space
  *	- program IOMMU as an I/O device in Device Table
