@@ -734,7 +734,7 @@ static int vfio_pci_set_msi_prepare(struct vfio_pci_core_device *vdev,
 		return ret;
 
 	for (i = start; i < start + count; i++) {
-		ret = vfio_iommufd_device_set_msi_iova(core, i, iovas[i]);
+		ret = vfio_iommufd_device_set_msi_iova(core, i, iovas[i-start]);
 		if (ret)
 			return ret;
 	}
