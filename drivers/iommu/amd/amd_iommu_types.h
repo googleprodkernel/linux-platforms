@@ -571,6 +571,8 @@ struct amd_iommu_viommu {
 	 * Indexed by guest domain ID.
 	 */
 	struct xarray gdomid_array;
+
+	u32 iommu_devid;
 };
 
 /*
