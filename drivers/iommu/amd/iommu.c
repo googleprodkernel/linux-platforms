@@ -2602,6 +2602,14 @@ static struct iommu_domain *amd_iommu_domain_alloc(unsigned int type)
 	return domain;
 }
 
+static inline bool is_nest_parent_supported(u32 flags)
+{
+	/* Only allow nest parent when these features are supported */
+	return check_feature(FEATURE_GT) &&
+	       check_feature(FEATURE_GIOSUP) &&
+	       check_feature2(FEATURE_GCR3TRPMODE);
+}
+
 static struct iommu_domain *
 amd_iommu_domain_alloc_user(struct device *dev, u32 flags,
 			    struct iommu_domain *parent,
@@ -2611,7 +2619,8 @@ amd_iommu_domain_alloc_user(struct device *dev, u32 flags,
 	unsigned int type = IOMMU_DOMAIN_UNMANAGED;
 	struct amd_iommu *iommu = NULL;
 	const u32 supported_flags = IOMMU_HWPT_ALLOC_DIRTY_TRACKING |
-						IOMMU_HWPT_ALLOC_PASID;
+						IOMMU_HWPT_ALLOC_PASID |
+						IOMMU_HWPT_ALLOC_NEST_PARENT;
 
 	if (dev)
 		iommu = get_amd_iommu_from_dev(dev);
@@ -2619,26 +2628,36 @@ amd_iommu_domain_alloc_user(struct device *dev, u32 flags,
 	if ((flags & ~supported_flags) || parent || user_data)
 		return ERR_PTR(-EOPNOTSUPP);
 
-	/* Allocate domain with v2 page table if IOMMU supports PASID. */
-	if (flags & IOMMU_HWPT_ALLOC_PASID) {
-		if (!amd_iommu_v2_supported())
-			return ERR_PTR(-EOPNOTSUPP);
+	switch (flags & supported_flags) {
+	case IOMMU_HWPT_ALLOC_DIRTY_TRACKING:
+	case IOMMU_HWPT_ALLOC_NEST_PARENT:
+	case IOMMU_HWPT_ALLOC_DIRTY_TRACKING | IOMMU_HWPT_ALLOC_NEST_PARENT:
+		/*
+		 * Allocate domain with v1 page table for dirty tracking
+		 * and/or Nest parent.
+		 */
+		if ((flags & IOMMU_HWPT_ALLOC_DIRTY_TRACKING) &&
+		    !amd_iommu_hd_support(iommu))
+			break;
 
-		return do_iommu_domain_alloc(type, dev, flags, AMD_IOMMU_V2);
-	}
+		if ((flags & IOMMU_HWPT_ALLOC_NEST_PARENT) &&
+		    !is_nest_parent_supported(flags))
+			break;
 
-	/* Allocate domain with v1 page table for dirty tracking */
-	if (flags & IOMMU_HWPT_ALLOC_DIRTY_TRACKING) {
-		if (iommu && amd_iommu_hd_support(iommu)) {
-			return do_iommu_domain_alloc(type, dev,
+		return do_iommu_domain_alloc(type, dev,
 						     flags, AMD_IOMMU_V1);
-		}
-
-		return ERR_PTR(-EOPNOTSUPP);
+	case IOMMU_HWPT_ALLOC_PASID:
+		/* Allocate domain with v2 page table if IOMMU supports PASID. */
+		if (!amd_iommu_v2_supported())
+			break;
+		return do_iommu_domain_alloc(type, dev, flags, AMD_IOMMU_V2);
+	case 0:
+		/* If nothing specific is required use the kernel commandline default */
+		return do_iommu_domain_alloc(type, dev, 0, amd_iommu_pgtable);
+	default:
+		break;
 	}
-
-	/* If nothing specific is required use the kernel commandline default */
-	return do_iommu_domain_alloc(type, dev, 0, amd_iommu_pgtable);
+	return ERR_PTR(-EOPNOTSUPP);
 }
 
 static void amd_iommu_domain_free(struct iommu_domain *dom)
