@@ -1004,11 +1004,13 @@ struct iommu_fault_alloc {
  * @IOMMU_VIOMMU_TYPE_ARM_SMMUV3: ARM SMMUv3 driver specific type
  * @IOMMU_VIOMMU_TYPE_TEGRA241_CMDQV: NVIDIA Tegra241 CMDQV (extension for ARM
  *                                    SMMUv3) enabled ARM SMMUv3 type
+ * @IOMMU_VIOMMU_TYPE_AMD: AMD HW-vIOMMU type
  */
 enum iommu_viommu_type {
 	IOMMU_VIOMMU_TYPE_DEFAULT = 0,
 	IOMMU_VIOMMU_TYPE_ARM_SMMUV3 = 1,
 	IOMMU_VIOMMU_TYPE_TEGRA241_CMDQV = 2,
+	IOMMU_VIOMMU_TYPE_AMD = 3,
 };
 
 /**
@@ -1025,6 +1027,23 @@ enum iommu_viommu_type {
 struct iommu_viommu_tegra241_cmdqv {
 	__aligned_u64 out_vintf_mmap_offset;
 	__aligned_u64 out_vintf_mmap_length;
+};
+
+/**
+ * struct iommu_viommu_amd - AMD vIOMMU Interface (IOMMU_VIOMMU_TYPE_AMD)
+ * @iommu_devid: Host IOMMU PCI device ID
+ * @viommu_devid: Guest vIOMMU PCI device ID
+ * @trans_devid: GPA->GVA translation device ID (host)
+ * @out_gid: (out) Guest ID
+ * @out_vfmmio_mmap_offset: (out) mmap offset for vIOMMU VF-MMIO
+ */
+struct iommu_viommu_amd {
+	__u32 iommu_devid;
+	__u32 viommu_devid;
+	__u32 trans_devid;
+	__u32 out_gid;
+	__aligned_u64 out_vfmmio_mmap_offset;
+	__u32 reserved; /* must be last */
 };
 
 /**
