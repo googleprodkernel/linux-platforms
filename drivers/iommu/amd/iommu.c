@@ -1874,7 +1874,7 @@ int amd_iommu_pdom_id_alloc(void)
 	return id;
 }
 
-static void domain_id_free(int id)
+void amd_iommu_pdom_id_free(int id)
 {
 	spin_lock(&pd_bitmap_lock);
 	if (id > 0 && id < MAX_DOMAIN_ID)
@@ -1924,7 +1924,7 @@ static void free_gcr3_table(struct gcr3_tbl_info *gcr3_info)
 	gcr3_info->glx = 0;
 
 	/* Free per device domain ID */
-	domain_id_free(gcr3_info->domid);
+	amd_iommu_pdom_id_free(gcr3_info->domid);
 
 	free_page((unsigned long)gcr3_info->gcr3_tbl);
 	gcr3_info->gcr3_tbl = NULL;
@@ -1963,7 +1963,7 @@ static int setup_gcr3_table(struct gcr3_tbl_info *gcr3_info,
 
 	gcr3_info->gcr3_tbl = alloc_pgtable_page(nid, GFP_KERNEL);
 	if (gcr3_info->gcr3_tbl == NULL) {
-		domain_id_free(gcr3_info->domid);
+		amd_iommu_pdom_id_free(gcr3_info->domid);
 		return -ENOMEM;
 	}
 
@@ -2430,7 +2430,7 @@ static void protection_domain_free(struct protection_domain *domain)
 		free_page((unsigned long)domain->iop.root);
 
 	if (domain->id)
-		domain_id_free(domain->id);
+		amd_iommu_pdom_id_free(domain->id);
 
 	kfree(domain);
 }
