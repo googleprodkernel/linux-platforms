@@ -227,6 +227,7 @@ extern bool amd_iommu_snp_en;
 
 struct dev_table_entry *amd_iommu_get_ivhd_dte_flags(u16 segid, u16 devid);
 struct iommu_dev_data *search_dev_data(struct amd_iommu *iommu, u16 devid);
+int amd_iommu_completion_wait(struct amd_iommu *iommu);
 
 void amd_iommu_set_dte_v1(struct iommu_dev_data *dev_data,
 			  struct protection_domain *domain,
