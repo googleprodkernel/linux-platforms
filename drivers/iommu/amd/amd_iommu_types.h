@@ -15,6 +15,7 @@
 #include <linux/list.h>
 #include <linux/spinlock.h>
 #include <linux/pci.h>
+#include <linux/iommufd.h>
 #include <linux/irqreturn.h>
 #include <linux/io-pgtable.h>
 
@@ -548,6 +549,11 @@ struct amd_io_pgtable {
 enum protection_domain_mode {
 	PD_MODE_V1 = 1,
 	PD_MODE_V2,
+};
+
+struct amd_iommu_viommu {
+	struct iommufd_viommu core;
+	struct protection_domain *parent; /* nest parent domain for this viommu */
 };
 
 /*
