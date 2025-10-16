@@ -6,6 +6,7 @@
 #define dev_fmt(fmt)	"AMD-Vi: " fmt
 
 #include <linux/iommu.h>
+#include <linux/refcount.h>
 #include <uapi/linux/iommufd.h>
 
 #include "amd_iommu.h"
@@ -68,6 +69,7 @@ amd_iommu_alloc_domain_nested(struct iommufd_viommu *viommu, u32 flags,
 {
 	int ret;
 	struct nested_domain *ndom;
+	struct guest_domain_mapping_info *gdom_info, *curr;
 	struct amd_iommu_viommu *aviommu = container_of(viommu, struct amd_iommu_viommu, core);
 
 	if (user_data->type != IOMMU_HWPT_DATA_AMD_GUEST)
@@ -92,7 +94,60 @@ amd_iommu_alloc_domain_nested(struct iommufd_viommu *viommu, u32 flags,
 	ndom->domain.type = IOMMU_DOMAIN_NESTED;
 	ndom->viommu = aviommu;
 
+	gdom_info = kzalloc(sizeof(*gdom_info), GFP_KERNEL);
+	if (!gdom_info)
+		goto out_err;
+
+	/*
+	 * Normally, when a guest has multiple pass-through devices,
+	 * the IOMMU driver setup DTEs with the same stage-2 table and
+	 * use the same host domain ID (hDomId). In case of nested translation,
+	 * if the guest setup different stage-1 tables with same PASID,
+	 * IOMMU would use the same TLB tag. This will results in TLB
+	 * aliasing issue.
+	 *
+	 * The guest is assigning gDomIDs based on its own algorithm for managing
+	 * cache tags of (DomID, PASID). Within a single viommu, the nest parent domain
+	 * (w/ S2 table) is used by all DTEs. But we need to consistently map the gDomID
+	 * to a single hDomID. This is done using an xarray in the vIOMMU to
+	 * keep track of the gDomID mapping. When the S2 is changed, the INVALIDATE_IOMMU_PAGES
+	 * command must be issued for each hDomID in the xarray.
+	 */
+	curr = xa_cmpxchg(&aviommu->gdomid_array,
+			  ndom->gdom_id, NULL, gdom_info, GFP_ATOMIC);
+	if (curr) {
+		if (xa_err(curr)) {
+			ret = -EINVAL;
+			goto out_err_gdom_info;
+		} else {
+			/* The gDomID already exist */
+			pr_debug("%s: Found gdom_id=%#x, hdom_id=%#x\n",
+				 __func__, ndom->gdom_id, curr->hdom_id);
+			refcount_inc(&curr->users);
+			ndom->gdom_info = curr;
+			kfree(gdom_info);
+			return &ndom->domain;
+		}
+	}
+
+	/* The gDomID does not exist. We allocate new hdom_id */
+	gdom_info->hdom_id = amd_iommu_pdom_id_alloc();
+	if (gdom_info->hdom_id <= 0) {
+		xa_cmpxchg(&aviommu->gdomid_array,
+			   ndom->gdom_id, gdom_info, NULL, GFP_ATOMIC);
+		ret = -ENOSPC;
+		goto out_err_gdom_info;
+	}
+
+	refcount_set(&gdom_info->users, 1);
+	ndom->gdom_info = gdom_info;
+	pr_debug("%s: Allocate gdom_id=%#x, hdom_id=%#x\n",
+		 __func__, ndom->gdom_id, gdom_info->hdom_id);
+
 	return &ndom->domain;
+
+out_err_gdom_info:
+	kfree(gdom_info);
 out_err:
 	kfree(ndom);
 	return ERR_PTR(ret);
@@ -100,8 +155,33 @@ out_err:
 
 static void nested_domain_free(struct iommu_domain *dom)
 {
+	struct guest_domain_mapping_info *curr;
 	struct nested_domain *ndom = to_ndomain(dom);
+	struct amd_iommu_viommu *aviommu = ndom->viommu;
 
+	if (!refcount_dec_and_test(&ndom->gdom_info->users))
+		return;
+
+	/*
+	 * The refcount for the gdom_id to hdom_id mapping is zero.
+	 * It is now safe to remove the mapping.
+	 */
+	curr = xa_cmpxchg(&aviommu->gdomid_array, ndom->gdom_id,
+			  ndom->gdom_info, NULL, GFP_ATOMIC);
+	if (curr) {
+		if (xa_err(curr)) {
+			pr_err("%s: Failed to free nested domain gdom_id=%#x\n",
+			       __func__, ndom->gdom_id);
+			return;
+		}
+
+		/* success */
+		pr_debug("%s: Free gdom_id=%#x, hdom_id=%#x\n",
+			__func__, ndom->gdom_id, curr->hdom_id);
+		kfree(curr);
+	}
+
+	amd_iommu_pdom_id_free(ndom->gdom_info->hdom_id);
 	kfree(ndom);
 }
 
