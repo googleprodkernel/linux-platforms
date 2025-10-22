@@ -24,7 +24,6 @@
 #include "amd_iommu.h"
 #include "amd_iommu_types.h"
 #include "amd_viommu.h"
-#include "../iommu-pages.h"
 
 LIST_HEAD(viommu_devid_map);
 
