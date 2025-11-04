@@ -247,6 +247,7 @@ struct operand {
 	union {
 		unsigned long val;
 		u64 val64;
+		__uint128_t val128;
 		char valptr[sizeof(sse128_t)];
 		sse128_t vec_val;
 		u64 mm_val;
