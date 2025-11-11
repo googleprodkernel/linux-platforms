@@ -192,3 +192,11 @@ extern bool amd_iommu_snp_en;
 
 struct dev_table_entry *amd_iommu_get_ivhd_dte_flags(u16 segid, u16 devid);
 struct iommu_dev_data *search_dev_data(struct amd_iommu *iommu, u16 devid);
+
+static inline void
+amd_iommu_make_clear_dte(struct iommu_dev_data *dev_data, struct dev_table_entry *new)
+{
+	/* All existing DTE must have V bit set */
+	new->data128[0] = DTE_FLAG_V;
+	new->data128[1] = 0;
+}
