@@ -193,6 +193,10 @@ extern bool amd_iommu_snp_en;
 struct dev_table_entry *amd_iommu_get_ivhd_dte_flags(u16 segid, u16 devid);
 struct iommu_dev_data *search_dev_data(struct amd_iommu *iommu, u16 devid);
 
+void amd_iommu_update_dte(struct amd_iommu *iommu,
+			  struct iommu_dev_data *dev_data,
+			  struct dev_table_entry *new);
+
 static inline void
 amd_iommu_make_clear_dte(struct iommu_dev_data *dev_data, struct dev_table_entry *new)
 {
