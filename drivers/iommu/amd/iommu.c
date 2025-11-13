@@ -892,11 +892,13 @@ static void amd_iommu_report_page_fault(struct amd_iommu *iommu,
 		if (__ratelimit(&dev_data->rs)) {
 			pci_err(pdev, "Event logged [IO_PAGE_FAULT domain=0x%04x address=0x%llx flags=0x%04x vflags=%#x]\n",
 				domain_id, address, flags, vflags);
+			dump_dte_entry(iommu, devid);
 		}
 	} else {
 		pr_err_ratelimited("Event logged [IO_PAGE_FAULT device=%04x:%02x:%02x.%x domain=0x%04x address=0x%llx flags=0x%04x vflags=%#x]\n",
 			iommu->pci_seg->id, PCI_BUS_NUM(devid), PCI_SLOT(devid), PCI_FUNC(devid),
 			domain_id, address, flags, vflags);
+		dump_dte_entry(iommu, devid);
 	}
 
 out:
