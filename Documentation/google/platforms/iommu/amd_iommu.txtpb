@@ -1,0 +1,12 @@
+# proto-file: prodkernel/rebase/build/feature_doc.proto
+# proto-message: GoogleFeatureDoc
+
+summary: "hw assisted vIOMMU support for AMD"
+feature_id: 452955860
+design_doc: "go/rumi-e2e"
+business_requirement: REQUIREMENT_GLOBAL
+business_requirement_justification: "Required to enable hw-assisted IOMMU for Cloud VM and TI-VM"
+risk_assessment: RISK_LOW
+risk_assessment_justification: "The feature is only enabled in VM environment"
+scope: SCOPE_ALL
+test_details: "test dma within VM envirmoment //cloud/vmm/testing/guitar3/tpu/workflows:*"
