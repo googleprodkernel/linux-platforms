@@ -32,12 +32,12 @@ static int validate_gdte_nested(struct iommu_hwpt_amd_guest *gdte)
 	    FIELD_GET(DTE_HOST_TRP, gdte->dte[0]) != 0)
 		return -EINVAL;
 
-	/* Must be non-zero: V, GIOV, GV, GCR3 TRP */
-	if (FIELD_GET(DTE_FLAG_V, gdte->dte[0]) == 0 ||
-	    FIELD_GET(DTE_FLAG_GV, gdte->dte[0]) == 0 ||
-	    (FIELD_GET(DTE_GCR3_14_12, gdte->dte[0]) == 0 &&
-	     FIELD_GET(DTE_GCR3_30_15, gdte->dte[1]) == 0 &&
-	     FIELD_GET(DTE_GCR3_51_31, gdte->dte[1]) == 0))
+	/* GCR3 TRP must be non-zero if V, GV is set */
+	if (FIELD_GET(DTE_FLAG_V, gdte->dte[0]) == 1 &&
+	    FIELD_GET(DTE_FLAG_GV, gdte->dte[0]) == 1 &&
+	    FIELD_GET(DTE_GCR3_14_12, gdte->dte[0]) == 0 &&
+	    FIELD_GET(DTE_GCR3_30_15, gdte->dte[1]) == 0 &&
+	    FIELD_GET(DTE_GCR3_51_31, gdte->dte[1]) == 0)
 		return -EINVAL;
 
 	/* Valid Guest Paging Mode values are 0 and 1 */
@@ -181,11 +181,14 @@ static void set_dte_nested(struct amd_iommu *iommu,
 	 */
 	amd_iommu_set_dte_v1(dev_data, parent, ndom->gdom_info->hdom_id, &new);
 
+	/* GV is required for nested page table */
+	new.data[0] |= DTE_FLAG_GV;
+
 	/* Guest PPR */
 	new.data[0] |= gdte->dte[0] & DTE_FLAG_PPR;
 
 	/* Guest translation stuff */
-	new.data[0] |= gdte->dte[0] & (DTE_GLX | DTE_FLAG_GV | DTE_FLAG_GIOV);
+	new.data[0] |= gdte->dte[0] & (DTE_GLX | DTE_FLAG_GIOV);
 
 	/* GCR3 table */
 	new.data[0] |= gdte->dte[0] & DTE_GCR3_14_12;
