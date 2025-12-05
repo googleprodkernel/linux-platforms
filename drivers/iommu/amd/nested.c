@@ -217,13 +217,13 @@ static int nested_attach_device(struct iommu_domain *dom, struct device *dev)
 	if (WARN_ON(dom->type != IOMMU_DOMAIN_NESTED))
 		return -EINVAL;
 
-	mutex_lock(&dev_data->mutex);
+	spin_lock(&dev_data->lock);
 
 	/* Setup DTE for nested translation and
 	 * update the device table */
 	set_dte_nested(iommu, dom, dev_data);
 
-	mutex_unlock(&dev_data->mutex);
+	spin_unlock(&dev_data->lock);
 
 	return ret;
 }
