@@ -194,7 +194,6 @@ viommu_domain_alloc(struct amd_iommu *iommu)
 		goto err_out;
 
 	domain->pd_mode = PD_MODE_V1;
-	//domain->iop.pgtbl.cfg.amd.nid = dev_to_node(&iommu->dev->dev);
 
 	domain->domain.geometry.aperture_start = 0;
 	domain->domain.geometry.aperture_end   = ~0ULL;
@@ -540,10 +539,8 @@ static struct irte_ga *_get_ext_intremap_entry(struct amd_iommu *iommu, u32 ext_
 	if (*l1_entry & 1ULL) {
 		l2_table = iommu_phys_to_virt(*l1_entry & 0x000FFFFFFFFFFFC0);
 	} else {
-		int size = get_irq_table_size(MAX_IRQS_PER_TABLE_512);
-
-		l2_table = iommu_alloc_pages_node_sz(dev_to_node(&iommu->dev->dev),
-						     GFP_KERNEL, size);
+		l2_table = alloc_pgtable_page(dev_to_node(&iommu->dev->dev),
+						     GFP_KERNEL);
 		if (!l2_table)
 			return NULL;
 
