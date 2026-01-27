@@ -2721,13 +2721,6 @@ struct iommu_domain *amd_iommu_domain_alloc(unsigned int type)
 	struct iommu_domain *domain;
 	int pgtable = amd_iommu_pgtable;
 
-	/*
-	 * Force IOMMU v1 page table when allocating
-	 * domain for pass-through devices.
-	 */
-	if (type == IOMMU_DOMAIN_UNMANAGED)
-		pgtable = AMD_IOMMU_V1;
-
 	domain = do_iommu_domain_alloc(type, NULL, 0, pgtable);
 	if (IS_ERR(domain))
 		return NULL;
